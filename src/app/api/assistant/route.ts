@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     await recordRun(db, session.id, run);
 
     const proposals = run.steps
-      .filter((s) => s.ok && ['propose_conversion', 'propose_bill_payment', 'propose_transfer'].includes(s.tool))
+      .filter((s) => s.ok && ['propose_conversion', 'propose_bill_payment', 'propose_transfer', 'propose_withdrawal'].includes(s.tool))
       .map((s) => (s.resultSummary as { proposalId?: string })?.proposalId)
       .filter(Boolean);
 

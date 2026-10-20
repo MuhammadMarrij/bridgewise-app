@@ -12,13 +12,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Assistant, Icon, type ChatMsg, type Json } from './ui';
 import { Bills, Home, Markets, Onboarding, Wallet, api, type Ctx } from './views';
 import { Activity, AddMoney, Budget, RecordPayment, SendMoney } from './views2';
+import { Accounts } from './views3';
 
 const TABS = [
   { id: 'home', label: 'Home', icon: 'home', mobile: true },
   { id: 'wallet', label: 'Wallet', icon: 'wallet', mobile: true },
+  { id: 'accounts', label: 'Cards & accounts', icon: 'card', mobile: true },
   { id: 'activity', label: 'Activity', icon: 'clock', mobile: true },
   { id: 'send', label: 'Send', icon: 'send', mobile: true },
-  { id: 'budget', label: 'Budget', icon: 'chart', mobile: true },
+  { id: 'budget', label: 'Budget', icon: 'chart', mobile: false },
   { id: 'bills', label: 'Bills', icon: 'bill', mobile: false },
   { id: 'markets', label: 'Markets', icon: 'up', mobile: false },
 ] as const;
@@ -29,6 +31,7 @@ const TITLES: Record<string, [string, string]> = {
   bills: ['Bills', 'Tuition and fees — read from your invoice, paid on your approval.'],
   send: ['Send money', 'To family, friends and landlords — and what the market would charge you.'],
   activity: ['Activity', 'Every movement on every pocket, with the balance after it.'],
+  accounts: ['Cards & accounts', 'Bank cards, Alipay, WeChat Pay and bank accounts linked to your wallet.'],
   budget: ['Budget', 'Where your money goes, and how long it will last.'],
   markets: ['Markets', 'The exchange rates that matter to you.'],
 };
@@ -140,6 +143,7 @@ export default function App() {
           {tab === 'bills' && <Bills {...ctx} />}
           {tab === 'send' && <SendMoney {...ctx} />}
           {tab === 'activity' && <Activity {...ctx} />}
+          {tab === 'accounts' && <Accounts {...ctx} />}
           {tab === 'budget' && <Budget {...ctx} />}
           {tab === 'markets' && <Markets {...ctx} />}
         </div>

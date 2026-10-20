@@ -12,7 +12,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { accounts, actionProposals, beneficiaries, ledgerEntries, obligations, recipients, sessions } from '../db/schema';
+import { accounts, actionProposals, beneficiaries, ledgerEntries, linkedSources, obligations, recipients, sessions } from '../db/schema';
+import { push as connectorPush } from '../connectors';
 import {
   CURRENCY_REGISTRY,
   formatAmount,
@@ -360,6 +361,9 @@ export async function executeProposal(
       throw new AppError('TERMS_CHANGED', 'the terms changed since you reviewed them');
     }
 
+    if (proposal.kind === 'withdraw') {
+      return executeWithdraw(tx as unknown as Db, session, proposal);
+    }
     if (proposal.kind === 'send') {
       return executeSend(tx as unknown as Db, session, proposal);
     }
@@ -559,6 +563,56 @@ async function executeSend(tx: Db, session: ResolvedSession, proposal: typeof ac
   await tx.update(actionProposals).set({ status: 'EXECUTED', decidedAt: now, resultJson: outcome }).where(eq(actionProposals.id, proposal.id));
   await appendAudit(tx, {
     sessionId: session.id, correlationId: proposal.id, type: 'transfer.sent', actor: 'user', outcome: 'allowed',
+    payload: { proposalId: proposal.id, termsHash: proposal.termsHash, ...outcome },
+  });
+  return { replay: false, proposal: { ...proposal, status: 'EXECUTED', resultJson: outcome } };
+}
+
+/* --------------------------------------------------------------- withdraw */
+
+/** Moves money to the student's own linked wallet or bank, re-checking the source under lock. */
+async function executeWithdraw(tx: Db, session: ResolvedSession, proposal: typeof actionProposals.$inferSelect) {
+  const t = proposal.termsJson as {
+    sessionId: string; sourceId: string; sourceLabel: string; sourceKind: string; receiveAmount: string;
+    receiveCurrency: Currency; fromPocketId: string; fromCurrency: Currency; debitAmount: string;
+  };
+  if (t.sessionId !== session.id) throw new AppError('NOT_FOUND', 'no such proposal');
+  const src = (await tx.select().from(linkedSources).where(eq(linkedSources.id, t.sourceId)).for('update'))[0];
+  if (!src || src.sessionId !== session.id || src.status !== 'ACTIVE' || src.label !== t.sourceLabel) {
+    throw new AppError('TERMS_CHANGED', 'that linked account changed or was removed since you approved');
+  }
+  const pocket = (await tx.select().from(accounts)
+    .where(and(eq(accounts.id, t.fromPocketId), eq(accounts.sessionId, session.id))).for('update'))[0];
+  if (!pocket) throw new AppError('NOT_FOUND', 'pocket not found');
+  const debit = parseAmount(t.debitAmount, t.fromCurrency);
+  const credit = parseAmount(t.receiveAmount, t.receiveCurrency);
+  if (debit > pocket.balanceMinor - pocket.reservedMinor) throw new AppError('INSUFFICIENT_FUNDS', 'your balance changed since this was quoted');
+  const out = connectorPush(src.kind as 'wallet' | 'bank', src.token, credit);
+  const after = pocket.balanceMinor - debit;
+  await tx.update(accounts).set({ balanceMinor: after, version: pocket.version + 1 }).where(eq(accounts.id, pocket.id));
+  await tx.insert(ledgerEntries).values(
+    t.fromCurrency === t.receiveCurrency
+      ? [
+          { proposalId: proposal.id, bucket: 'student_account', accountId: pocket.id, currency: t.fromCurrency, signedMinor: -debit },
+          { proposalId: proposal.id, bucket: 'funding', currency: t.receiveCurrency, signedMinor: credit },
+        ]
+      : [
+          { proposalId: proposal.id, bucket: 'student_account', accountId: pocket.id, currency: t.fromCurrency, signedMinor: -debit },
+          { proposalId: proposal.id, bucket: 'fx_clearing', currency: t.fromCurrency, signedMinor: debit },
+          { proposalId: proposal.id, bucket: 'fx_clearing', currency: t.receiveCurrency, signedMinor: -credit },
+          { proposalId: proposal.id, bucket: 'funding', currency: t.receiveCurrency, signedMinor: credit },
+        ],
+  );
+  await postStatement(tx, {
+    sessionId: session.id, accountId: pocket.id, kind: 'withdraw', description: `To ${src.label} · ${out.reference}`,
+    category: 'other', currency: t.fromCurrency, amountMinor: -debit, balanceAfterMinor: after,
+    counterparty: src.label, proposalId: proposal.id, linkedSourceId: src.id,
+  });
+  const now = new Date();
+  const outcome = { moved: `${t.receiveAmount} ${t.receiveCurrency}`, to: src.label, debited: `${t.debitAmount} ${t.fromCurrency}`, reference: out.reference, status: 'SENT' };
+  await tx.update(actionProposals).set({ status: 'EXECUTED', decidedAt: now, resultJson: outcome }).where(eq(actionProposals.id, proposal.id));
+  await appendAudit(tx, {
+    sessionId: session.id, correlationId: proposal.id, type: 'wallet.withdrawn', actor: 'user', outcome: 'allowed',
     payload: { proposalId: proposal.id, termsHash: proposal.termsHash, ...outcome },
   });
   return { replay: false, proposal: { ...proposal, status: 'EXECUTED', resultJson: outcome } };

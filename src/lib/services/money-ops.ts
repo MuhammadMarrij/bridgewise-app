@@ -50,7 +50,7 @@ async function ensurePocket(db: Db, sessionId: string, currency: Currency) {
 export async function topUp(
   db: Db,
   session: ResolvedSession,
-  input: { currency: Currency; amount: string; source: string; idempotencyKey: string },
+  input: { currency: Currency; amount: string; source: string; idempotencyKey: string; linkedSourceId?: string },
 ) {
   const amount = parseAmount(input.amount, input.currency);
   if (amount <= 0n) throw new AppError('VALIDATION_FAILED', 'amount must be above zero');
@@ -75,7 +75,7 @@ export async function topUp(
     await postStatement(tx as unknown as Db, {
       sessionId: session.id, accountId: locked.id, kind: 'topup', description: `Money in · ${input.source}`,
       category: 'income', currency: input.currency, amountMinor: amount, balanceAfterMinor: after,
-      counterparty: input.source, idempotencyKey: input.idempotencyKey,
+      counterparty: input.source, idempotencyKey: input.idempotencyKey, linkedSourceId: input.linkedSourceId ?? null,
     });
     await appendAudit(tx as unknown as Db, {
       sessionId: session.id, correlationId: input.idempotencyKey, type: 'wallet.topup', actor: 'user', outcome: 'allowed',

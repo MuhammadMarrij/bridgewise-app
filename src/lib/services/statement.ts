@@ -16,7 +16,8 @@ export type Category = (typeof CATEGORIES)[number];
 export interface StatementRow {
   sessionId: string;
   accountId: string;
-  kind: 'topup' | 'convert_out' | 'convert_in' | 'bill' | 'send' | 'spend' | 'opening';
+  kind: 'topup' | 'convert_out' | 'convert_in' | 'bill' | 'send' | 'spend' | 'opening' | 'withdraw';
+  linkedSourceId?: string | null;
   description: string;
   category: Category;
   currency: string;
@@ -34,5 +35,6 @@ export async function postStatement(tx: Db, row: StatementRow): Promise<void> {
     counterparty: row.counterparty?.slice(0, 120) ?? null,
     proposalId: row.proposalId ?? null,
     idempotencyKey: row.idempotencyKey ?? null,
+    linkedSourceId: row.linkedSourceId ?? null,
   });
 }

@@ -291,3 +291,10 @@ caption { text-align: left; caption-side: bottom; padding-top: .6rem; font-size:
 .stat .k { font-size: .8rem; color: var(--muted); }
 .stat .v { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 @media (max-width: 860px) { .donut { grid-template-columns: 1fr; justify-items: center; } .donut-center { left: 50%; transform: translateX(-50%); } }
+
+/* Linked sources ------------------------------------------------------------- */
+.sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.source-face { border-radius: 16px; color: #fff; padding: 1rem 1.1rem; aspect-ratio: 1.586; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 10px 24px rgba(0,0,0,.18); }
+.source-brand { font-weight: 800; letter-spacing: .02em; }
+.source-kind { font-size: .72rem; opacity: .85; border: 1px solid rgba(255,255,255,.4); border-radius: 999px; padding: .05rem .5rem; }
+.source-num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.15rem; letter-spacing: .08em; }

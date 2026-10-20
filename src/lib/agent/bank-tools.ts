@@ -21,6 +21,7 @@ import { AppError } from '../services/errors';
 import { addBill, extractInvoice, proposeBillPayment } from '../services/bills';
 import { listBudgets, listRecipients, listTransactions, proposeSend, setBudget, spendingSummary } from '../services/money-ops';
 import { CATEGORIES, type Category } from '../services/statement';
+import { listSources, proposeWithdrawal } from '../services/linked';
 import type { ToolDefinition, ToolContext } from './tools';
 import { TOOLS } from './tools';
 
@@ -286,11 +287,44 @@ const budgetTool: ToolDefinition = {
   },
 };
 
+
+const linkedTool: ToolDefinition = {
+  name: 'list_linked_accounts',
+  description:
+    "The student's linked bank cards, Alipay, WeChat Pay and bank accounts (masked). You cannot link a new " +
+    'one or charge a card yourself; the student does that in Cards & accounts.',
+  schema: z.object({}).strict(),
+  handler: async (ctx) => {
+    const session = requireSession(ctx);
+    const rows = await listSources(ctx.db, session.id);
+    return bound({ linked: rows.map((r) => ({ id: r.id, kind: r.kind, provider: r.provider, label: r.label, currency: r.currency })) });
+  },
+};
+
+const withdrawTool: ToolDefinition = {
+  name: 'propose_withdrawal',
+  description:
+    "Prepare moving money from the wallet to the student's OWN linked Alipay, WeChat Pay or bank account. " +
+    'Creates an approval card; moves nothing until the student approves. Cards cannot receive money.',
+  schema: z.object({ sourceId: z.string().uuid(), receiveAmount: z.string().min(1).max(20), fromCurrency: currency.optional() }).strict(),
+  handler: async (ctx, args) => {
+    const session = requireSession(ctx);
+    const a = args as { sourceId: string; receiveAmount: string; fromCurrency?: Currency };
+    const p = await proposeWithdrawal(ctx.db, session, { ...a, proposedBy: 'agent' });
+    const t = p.termsJson as Record<string, unknown>;
+    return bound({
+      proposalId: p.id, card: p.title, arrives: `${t.receiveAmount} ${t.receiveCurrency}`, to: t.sourceLabel,
+      youPay: `${t.debitAmount} ${t.fromCurrency}`, rate: t.customerRate, midMarketRate: t.midRate,
+      leftInPocketAfter: `${t.leftInPocketAfter} ${t.fromCurrency}`, status: 'AWAITING_STUDENT_APPROVAL',
+    });
+  },
+};
+
 const compare = TOOLS.find((t) => t.name === 'compare_live_providers')!;
 
 export const BANK_TOOLS: readonly ToolDefinition[] = [
   overview, transactionsTool, spendingTool, fx, compare, recipientsTool,
-  readInvoice, addBillTool, payBillTool, convert, sendTool, alert, budgetTool,
+  readInvoice, addBillTool, payBillTool, convert, sendTool, alert, budgetTool, linkedTool, withdrawTool,
 ];
 
 export const BANK_SYSTEM_PROMPT = `You are BridgeWise, the AI money assistant inside a cross-border banking app for international students. Students hold money in several currencies, receive money from family abroad, and pay tuition and rent in the country where they study.
@@ -300,6 +334,7 @@ How you work:
 - Every figure you state must come from a tool result, exactly as given. Never calculate, estimate or round money yourself.
 - When the student pastes an invoice, call read_invoice, confirm the figures with them, then add_bill and propose_bill_payment.
 - For questions about spending, budgets or how long their money will last, call get_spending; for 'what did I pay' call get_transactions.
+- To move money to the student's own Alipay, WeChat Pay or bank, call list_linked_accounts and propose_withdrawal.
 - To send money, call list_recipients and propose_transfer. You cannot add recipients: if the person is missing, ask the student to add them in Send.
 - You can PREPARE actions (propose_conversion, propose_bill_payment, propose_transfer, set_rate_alert, set_budget) but you cannot execute anything. A proposal appears as a card the student approves. Say so plainly: "I've prepared it — review and approve the card."
 - Be proactive and specific. If a bill is due soon, a pocket cannot cover it, or the rate has moved, say so and offer the next step.

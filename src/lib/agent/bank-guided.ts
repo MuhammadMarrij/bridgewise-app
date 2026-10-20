@@ -149,6 +149,25 @@ export function bankGuidedAdapter(): ModelAdapter {
         return say('Your latest:\n' + tx.slice(0, 8).map((x) => `• ${x.description} — ${x.amount} ${x.currency} (balance ${x.balanceAfter})`).join('\n'));
       }
 
+      // "Move 500 CNY to my Alipay", "withdraw 1000 to CCB".
+      const outTo = /\b(alipay|wechat|weixin|ccb|icbc|boc|abc|cmb|hsbc|barclays|hbl|meezan|chase|bank)\b/.exec(t)?.[1];
+      if (/\b(move|withdraw|cash out|transfer|send|top up my|put)\b/.test(t) && outTo && !/cheapest|compare|provider/.test(t)) {
+        if (!got.has('list_linked_accounts')) return use(call('list_linked_accounts'));
+        const linked = (got.get('list_linked_accounts')!.linked as Json[]) ?? [];
+        const want = outTo === 'wechat' || outTo === 'weixin' ? 'wechatpay' : outTo === 'hsbc' ? 'hsbc_uk' : outTo;
+        const dest = linked.find((l) => l.provider === want) ?? (outTo === 'bank' ? linked.find((l) => l.kind === 'bank') : undefined);
+        if (!dest) return say(`You haven't linked ${outTo === 'wechat' ? 'WeChat Pay' : outTo.toUpperCase()} yet, and I can't link accounts for you. Add it in Cards & accounts, then ask again.`);
+        if (dest.kind === 'card') return say('Money can be moved to a bank account or mobile wallet, not to a card.');
+        if (!amount) return say(`How much should arrive in ${dest.label} (${dest.currency})?`);
+        if (!got.has('propose_withdrawal')) {
+          const from = cur.find((c) => c !== dest.currency);
+          return use(call('propose_withdrawal', { sourceId: dest.id, receiveAmount: amount, ...(from ? { fromCurrency: from } : {}) }));
+        }
+        const p = got.get('propose_withdrawal')!;
+        if (p.error) return say(`I couldn't prepare that: ${p.message}.`);
+        return say(`Ready: ${p.arrives} to ${p.to}; you pay ${p.youPay}${p.rate ? ` at ${p.rate} (mid ${p.midMarketRate})` : ''}, leaving ${p.leftInPocketAfter}. Approve the card to send it.`);
+      }
+
       // "Send 2000 CNY to Mum" — a person, not a provider comparison.
       const toWho = user.match(/\bto\s+(?:my\s+)?([A-Za-z][A-Za-z'\-]{1,30})/i)?.[1];
       if (/\b(send|transfer|pay)\b/.test(t) && toWho && !/cheapest|compare|provider|tuition|university|college/.test(t)) {

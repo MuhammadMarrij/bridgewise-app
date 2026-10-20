@@ -427,6 +427,7 @@ export const walletTransactions = pgTable('wallet_transactions', {
   counterparty: text('counterparty'),
   proposalId: uuid('proposal_id'),
   idempotencyKey: text('idempotency_key'),
+  linkedSourceId: uuid('linked_source_id'),
   createdAt: instant('created_at').notNull().defaultNow(),
 }, (t) => [index('wtx_session_time_idx').on(t.sessionId, t.createdAt)]);
 
@@ -438,5 +439,23 @@ export const recipients = pgTable('recipients', {
   country: text('country').notNull(),
   currency: text('currency').notNull(),
   accountLabel: text('account_label').notNull(),
+  createdAt: instant('created_at').notNull().defaultNow(),
+});
+
+/** A card, mobile wallet or bank account linked to the student's wallet. */
+export const linkedSources = pgTable('linked_sources', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(), // card | wallet | bank
+  provider: text('provider').notNull(), // visa | mastercard | unionpay | alipay | wechatpay | ccb | icbc | boc ...
+  label: text('label').notNull(),
+  last4: text('last4'),
+  brand: text('brand'),
+  currency: text('currency').notNull(),
+  holder: text('holder'),
+  expiry: text('expiry'),
+  token: text('token').notNull(),
+  connectorMode: text('connector_mode').notNull().default('sandbox'),
+  status: text('status').notNull().default('ACTIVE'),
   createdAt: instant('created_at').notNull().defaultNow(),
 });

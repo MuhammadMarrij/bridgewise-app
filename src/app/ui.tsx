@@ -90,6 +90,14 @@ export function ApprovalCard({
           ['Mid-market (ECB)', `${t.midRate}`],
           ['Our fee', `${money(t.marginCostInTarget, t.to)} · ${Number(t.marginBps) / 100}%`],
         ]
+      : p.kind === 'withdraw'
+      ? ([
+          ['Arrives', <strong key="w">{money(t.receiveAmount, t.receiveCurrency)}</strong>],
+          ['To', t.sourceLabel],
+          ['You pay', money(t.debitAmount, t.fromCurrency)],
+          ...(t.customerRate ? ([['Rate', `${t.customerRate} (mid ${t.midRate})`]] as Array<[string, ReactNode]>) : []),
+          ['Left in pocket', money(t.leftInPocketAfter, t.fromCurrency)],
+        ] as Array<[string, ReactNode]>)
       : p.kind === 'send'
       ? ([
           ['They receive', <strong key="r">{money(t.receiveAmount, t.receiveCurrency)}</strong>],
@@ -131,6 +139,8 @@ export function ApprovalCard({
               ? `Sent ${p.result.paid} to ${p.result.to}. The university confirms receipt on their side.`
               : p.kind === 'send'
               ? `Sent ${p.result.sent} to ${p.result.to}.`
+              : p.kind === 'withdraw'
+              ? `Moved ${p.result.moved} to ${p.result.to} · ref ${p.result.reference}.`
               : `Converted: ${p.result.sold} → ${p.result.bought}.`}
           </p>
         )}
@@ -194,6 +204,8 @@ const STEP_LABEL: Record<string, string> = {
   list_recipients: 'checked your recipients',
   propose_transfer: 'prepared transfer',
   set_budget: 'set a budget',
+  list_linked_accounts: 'checked linked accounts',
+  propose_withdrawal: 'prepared withdrawal',
 };
 
 export function Assistant({
