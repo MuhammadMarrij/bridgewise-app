@@ -63,7 +63,7 @@ const DISCLOSURE =
   'Quotes are published by Wise, which is itself a provider in this market. ' +
   'Treat the comparison as sourced, not neutral, and check the winning provider directly.';
 
-// ponytail: short in-process cache. Provider pricing moves with the market, not
+// short in-process cache. Provider pricing moves with the market, not
 // by the second, and the endpoint is free but not ours to hammer.
 const TTL_MS = Number(process.env.QUOTE_CACHE_TTL_MS ?? 10 * 60_000);
 const cache = new Map<string, { value: ProviderComparison; expires: number }>();

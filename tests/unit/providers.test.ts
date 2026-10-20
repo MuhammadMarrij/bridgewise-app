@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fetchProviderQuotes, clearQuoteCache } from '@/lib/rates/providers';
 
-// ponytail: hits the live endpoint. Asserts shape and invariants, never a
+// hits the live endpoint. Asserts shape and invariants, never a
 // specific price — the market moves and a fixed figure would be a test that
 // only passed on the day it was written.
 describe('real provider quotes', () => {

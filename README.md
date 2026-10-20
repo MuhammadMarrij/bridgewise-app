@@ -1,88 +1,48 @@
 # BridgeWise
 
-**An AI-native cross-border money app for international students.**
-Topic C — Cross-border & Student Finance Assistant · iCANX Fintechathon · Team Innovative Brothers
+**A multi-currency money app for international students, run by an AI assistant that never moves money without the student's approval.**
 
-**Live:** https://bridgewise-azure.vercel.app · English / 中文
-
-An international student lives in two currencies: money arrives from family in one, tuition and rent
-are billed in another. Today that means a home bank app, a remittance app, a spreadsheet and a
-calendar — and losing money to exchange-rate margins nobody shows them.
-
-BridgeWise is one account for every currency they live in, with an **AI assistant at the centre that
-does the work**: it reads their tuition invoice, works out how to pay it, watches the rate, compares
-what real banks would charge, and prepares every payment and conversion. **It never moves money
-itself** — every action is a card the student approves.
+Live: **https://bridgewise-azure.vercel.app** · English / 中文
+iCANX Fintechathon · Topic C, Cross-border & Student Finance · Innovative Brothers
 
 ## What it does
+- **Wallet:** one pocket per currency (CNY, PKR, INR, GBP, USD and more), valued at live European Central Bank rates; convert between pockets with the fee shown first.
+- **Money in, through real payment rails:** Alipay's own cashier (open-platform sandbox) or a bank card through Stripe (test mode). The wallet is credited only after the provider confirms the payment.
+- **Money out, for real:** pay anyone in China into their Alipay account, or move money to your own Alipay, through Alipay's transfer API. Real payouts need the account password again.
+- **Bills:** paste a tuition invoice; the assistant reads it and prepares the payment. A payee with an Alipay account is paid for real; otherwise the money is set aside until the bill is paid through the payee's own portal.
+- **Compare providers:** live quotes from 17 banks and transfer services, including the margin hidden in each exchange rate.
+- **Budget and runway:** spending by category, expenses paid elsewhere, and how long the money lasts.
+- **Credit in China:** a step-by-step plan for 征信 (PBOC), 芝麻信用 and 微信支付分. It is a plan, never a score.
 
-| | |
-|---|---|
-| **Account** | Email and password sign-up; China-first starting profiles (Pakistan→China, India→China, China→UK, Pakistan→US) |
-| **Add money for real rails** | Through **Alipay's official sandbox cashier** or a card via **Stripe** (test mode); credited only after the provider confirms |
-| **Cards & accounts** | Link UnionPay / Visa / Mastercard cards, Alipay, WeChat Pay, CCB, ICBC, BOC, ABC, CMB and home banks; card numbers tokenised, never stored |
-| **Credit in China** | A plan for 征信, 芝麻信用 and 微信支付分, with steps detected from the account; never presented as a score |
-| **中文** | The whole interface in Simplified Chinese; the live assistant replies in Chinese |
-| **Home briefing** | The assistant opens with what matters today: bills due and whether they're covered, how the student's own exchange rate moved this week, alerts that fired, actions waiting |
-| **Multi-currency wallet** | GBP, USD, CNY, PKR, INR, EUR and more, one pocket each, valued at live rates; add money, pay, convert with the fee shown before you approve |
-| **Statement** | Every movement on every pocket with the balance after it, filterable by pocket and category |
-| **Send money** | Save the people you pay (family, landlord, friends) and send to them in their currency at a live rate, on approval |
-| **Budget** | Where the money went by category, daily average, how long the wallet lasts, monthly budgets with alerts |
-| **Tuition from an invoice** | Paste the invoice. A parser extracts amount, due date, reference and payee; the assistant saves the bill and prepares the payment, refusing anything that breaks the student's living reserve |
-| **Compare real providers** | Live quotes from 17 named banks and transfer providers — HSBC, Barclays, NatWest, Wise, Remitly, MoneyGram, WorldRemit… — including the margin hidden in each exchange rate |
-| **Markets** | 30-day ECB history for the student's currencies; rate alerts |
+## The AI assistant
+The assistant runs on Anthropic's Claude with tool use. It has **read** tools (balances, statement, spending, live rates, provider quotes, invoices) and **propose** tools (convert, pay a bill, send, move out, alerts, budgets). It has no tool that executes. Every action becomes an approval card carrying a SHA-256 hash of its exact terms; only the student's approval executes it, re-checked on the server under row locks. It can pay only recipients the student saved, so a hostile message or invoice cannot redirect money.
 
-## The agent
-
-The assistant has two kinds of tool and only two: **read** (accounts, statement, spending, live rates, rate
-history, provider quotes, invoice parsing) and **propose** (convert, pay a bill, send to a saved recipient,
-set an alert or budget). It can only send to recipients the student saved themselves, so no message or
-invoice can get it to pay a new account. There is no tool that
-executes. A proposal becomes an approval card carrying a SHA-256 hash of its exact terms; only the
-student's tap executes it, and the server re-checks everything under lock — balance, reserve, the bill,
-the payee — before posting a balanced double-entry. A hostile instruction pasted into the chat can at
-worst produce a card the student declines.
-
-Runs on Claude (tool use) when `MODEL_API_KEY` is set; otherwise a deterministic **guided** planner
-drives the same tools and is labelled as such.
-
-## What is real
-
-| Real, live | BridgeWise's own |
-|---|---|
-| AI agent: Anthropic Claude (`claude-haiku-5-5`), live on the hosted site | |
-| Alipay open-platform **sandbox** and Stripe **test mode**: real SDKs, real signatures, real cashier | Sandbox connectors for WeChat Pay and Chinese banks |
-| Exchange rates — European Central Bank (Frankfurter), exchangerate-api | The ledger: double-entry core banking book |
-| 30-day rate history — ECB | Balances are test funds in that ledger |
-| 17 provider quotes — Wise public comparison | External settlement rails are integration points, not called |
-
-Moving money between a student's own pockets is exactly what a bank does inside its books. What needs a
-banking licence is settling externally; that hand-off is marked and stubbed, and a paid bill is reported
-as **sent**, not as confirmed by the university.
+Live use is capped (lifetime, daily and per-student dollar limits, and a per-answer token ceiling). Past a limit, a deterministic guided planner drives the same tools and the interface says so.
 
 ## Run it
+Requires Node 20+ and PostgreSQL 17.
 
 ```bash
-cp .env.example .env        # DATABASE_URL, SESSION_SECRET; optional MODEL_API_KEY, MODEL_NAME
+cp .env.example .env      # set DATABASE_URL and SESSION_SECRET; payment and model keys are optional
 npm ci
 npm run db:migrate
-npm run build && npm start  # http://localhost:3000
+npm run build && npm start   # http://localhost:3000
 ```
 
-Node 20+, PostgreSQL 17.
+Each payment rail and the live model switch on only when their keys are set in `.env`; see `.env.example`.
 
 ## Tests
-
 ```bash
-npm run test:unit           # 95   — money maths, planner, live-data adapters
-npm run test:integration    # 130 — real PostgreSQL: wallet, statement, approvals, concurrency, isolation
-npm run test:security       # 37  — attacks the running HTTP API (start the app first)
-npm run test:e2e            # 10  — Playwright, desktop and phone
-npm run eval:stub           # agent boundary, scripted
-npm run eval:live           # agent with a real model (needs MODEL_API_KEY)
+npm run test:unit
+npm run test:integration    # needs TEST_DATABASE_URL (a database ending in _test)
+npm run test:security       # attacks the running server; start it first
+npm run test:e2e            # Playwright, desktop and phone
 ```
 
-## Documents
+## Stack
+Next.js 16 and React 19 · TypeScript · PostgreSQL 17 with Drizzle ORM · Zod · Vitest · Playwright · Alipay open-platform SDK · Stripe · Anthropic API. Hosted on Vercel (Singapore) with Neon PostgreSQL (Singapore).
 
-`docs/TECHNICAL-REPORT.md` (start here) · `docs/SECURITY_REPORT.md` · `docs/GO_LIVE.md` (what turns each
-sandbox into real money) · `docs/DEPLOY.md` · `docs/ARCHITECTURE.md` · `docs/AI-DISCLOSURE.md`
+## Status
+Payments run in the providers' test environments (Alipay sandbox, Stripe test mode). Going live needs a registered business for merchant contracts and a licensed partner to hold funds; the code paths are already the providers' production APIs.
+
+Built with AI coding assistance (Claude Code); the team defined the product and is responsible for it.

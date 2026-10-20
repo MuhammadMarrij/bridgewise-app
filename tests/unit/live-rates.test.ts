@@ -23,7 +23,7 @@ describe('provider margin over mid-market', () => {
   });
 });
 
-// ponytail: hits the real network. Skipped when offline so the suite stays
+// hits the real network. Skipped when offline so the suite stays
 // runnable on a train; the assertion is about provenance, not a fixed number.
 describe('live reference rate', () => {
   it('fetches a real GBP/USD rate with a named source', async () => {

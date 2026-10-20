@@ -56,8 +56,6 @@ export interface SignUpInput {
   name: string;
   homeCurrency: Currency;
   studyCurrency: Currency;
-  homeBalance: string;
-  studyBalance: string;
 }
 
 export async function signUp(db: Db, input: SignUpInput): Promise<{ token: string; userId: string }> {
@@ -72,7 +70,9 @@ export async function signUp(db: Db, input: SignUpInput): Promise<{ token: strin
   const passwordHash = await hashPassword(input.password);
   const opened = await openStudentAccount(db, {
     name: input.name, homeCurrency: input.homeCurrency, studyCurrency: input.studyCurrency,
-    homeBalance: input.homeBalance, studyBalance: input.studyBalance,
+    // Every account starts at zero: what can later leave through a real rail
+    // must first have come in through one.
+    homeBalance: '0', studyBalance: '0',
   });
   await db.update(sessions).set({ expiresAt: new Date(Date.now() + SESSION_DAYS * 86_400_000) }).where(eq(sessions.id, opened.sessionId));
   const rows = await db.insert(users).values({
@@ -121,3 +121,19 @@ export async function userForSession(db: Db, sessionId: string) {
 
 // A fixed, valid hash of a random value, used to keep sign-in timing uniform.
 const DUMMY = 'scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+/**
+ * Step-up check before real money leaves: the account password again. A
+ * session cookie alone is not enough to approve a payout. A workspace with no
+ * account behind it (local tests only) passes, because it has no password.
+ */
+export async function confirmPassword(db: Db, sessionId: string, password: string | undefined): Promise<void> {
+  const u = (await db.select({ hash: users.passwordHash }).from(users).where(eq(users.sessionId, sessionId)))[0];
+  if (!u) {
+    if ((process.env.APP_ENV ?? 'local_demo') === 'hosted_demo') throw new AppError('NO_SESSION', 'sign in to approve payments');
+    return;
+  }
+  if (!password || !(await verifyPassword(password, u.hash))) {
+    throw new AppError('VALIDATION_FAILED', 'that password is not right', { password: 'incorrect' });
+  }
+}

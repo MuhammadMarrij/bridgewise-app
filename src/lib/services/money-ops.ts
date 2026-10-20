@@ -105,22 +105,15 @@ export async function recordSpend(
       .where(and(eq(walletTransactions.sessionId, session.id), eq(walletTransactions.idempotencyKey, input.idempotencyKey)));
     if (dup[0]) return { replay: true, balance: formatAmount(dup[0].balanceAfterMinor, input.currency) };
 
-    const locked = (await tx.select().from(accounts).where(eq(accounts.id, pocket.id)).for('update'))[0]!;
-    if (amount > locked.balanceMinor - locked.reservedMinor) {
-      throw new AppError('INSUFFICIENT_FUNDS', `you have ${formatAmount(locked.balanceMinor - locked.reservedMinor, input.currency)} ${input.currency}`);
-    }
-    const after = locked.balanceMinor - amount;
-    await tx.update(accounts).set({ balanceMinor: after, version: locked.version + 1 }).where(eq(accounts.id, locked.id));
-    await tx.insert(ledgerEntries).values([
-      { bucket: 'student_account', accountId: locked.id, currency: input.currency, signedMinor: -amount },
-      { bucket: 'merchant', currency: input.currency, signedMinor: amount },
-    ]);
+    // Paid with cash, WeChat or another card: it counts towards budgets and the
+    // runway, but no BridgeWise money moved, so the balance and ledger stay as they are.
+    const current = (await tx.select().from(accounts).where(eq(accounts.id, pocket.id)))[0]!;
     await postStatement(tx as unknown as Db, {
-      sessionId: session.id, accountId: locked.id, kind: 'spend', description: input.merchant,
-      category: input.category, currency: input.currency, amountMinor: -amount, balanceAfterMinor: after,
-      counterparty: input.merchant, idempotencyKey: input.idempotencyKey,
+      sessionId: session.id, accountId: current.id, kind: 'spend', description: input.merchant,
+      category: input.category, currency: input.currency, amountMinor: -amount, balanceAfterMinor: current.balanceMinor,
+      counterparty: input.merchant, idempotencyKey: input.idempotencyKey, reference: 'Paid elsewhere',
     });
-    return { replay: false, balance: formatAmount(after, input.currency) };
+    return { replay: false, balance: formatAmount(current.balanceMinor, input.currency) };
   });
 }
 

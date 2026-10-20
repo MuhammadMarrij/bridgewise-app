@@ -65,9 +65,10 @@ export function RecordPayment({ ctx, onClose }: { ctx: Ctx; onClose: () => void 
     catch (x: any) { setErr(x.message); } finally { setBusy(false); }
   }
   return (
-    <Sheet title="Pay with BridgeWise" onClose={onClose}>
+    <Sheet title="Log an expense" onClose={onClose}>
       <form className="stack" onSubmit={go}>
-        <div><label htmlFor="rp-m">Where</label><input id="rp-m" autoFocus value={f.merchant} onChange={(e) => setF({ ...f, merchant: e.target.value })} placeholder="Tesco, TfL, landlord…" required /></div>
+        <p className="hint">Spent with cash, WeChat or a card elsewhere? Log it so your budget and runway stay right. Your balance doesn&rsquo;t change.</p>
+        <div><label htmlFor="rp-m">Where</label><input id="rp-m" autoFocus value={f.merchant} onChange={(e) => setF({ ...f, merchant: e.target.value })} placeholder="Canteen, Didi, Meituan…" required /></div>
         <div className="field-row">
           <div><label htmlFor="rp-a">Amount</label>
             <div className="pair"><input id="rp-a" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="24.50" required />
@@ -76,7 +77,7 @@ export function RecordPayment({ ctx, onClose }: { ctx: Ctx; onClose: () => void 
             <select id="rp-c" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{CATS.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
         </div>
         {err && <div className="notice error" role="alert">{err}</div>}
-        <button className="btn" disabled={busy} style={{ justifyContent: 'center' }}>{busy ? 'Paying…' : 'Pay'}</button>
+        <button className="btn" disabled={busy} style={{ justifyContent: 'center' }}>{busy ? 'Saving…' : 'Log expense'}</button>
       </form>
     </Sheet>
   );

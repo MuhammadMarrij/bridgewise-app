@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getDb } from '@/lib/db/client';
 import { assertSameOrigin, clientKey, fail, json, parseBody, rateLimit, requireSession } from '@/lib/api/http';
 import { liveModelConfigured, selectLiveAdapter } from '@/lib/agent/adapter';
+import { liveBudget } from '@/lib/agent/budget';
 import { bankGuidedAdapter } from '@/lib/agent/bank-guided';
 import { BANK_SYSTEM_PROMPT, BANK_TOOLS } from '@/lib/agent/bank-tools';
 import { recordRun, runAgentTurn } from '@/lib/agent/runner';
@@ -49,12 +50,13 @@ export async function POST(req: NextRequest) {
       history: body.history ?? [],
     };
 
-    let run = liveModelConfigured()
+    const budget = liveModelConfigured() ? await liveBudget(db, session.id) : null;
+    let run = budget?.allowed
       ? await runAgentTurn({ db, session }, selectLiveAdapter(), body.message, opts)
       : null;
-    let fellBack: string | null = null;
+    let fellBack: string | null = budget && !budget.allowed ? 'BUDGET' : null;
     if (!run || run.status === 'MODEL_UNAVAILABLE' || run.status === 'TIMEOUT') {
-      fellBack = run ? run.errorClass ?? run.status : null;
+      fellBack = run ? run.errorClass ?? run.status : fellBack;
       run = await runAgentTurn({ db, session }, bankGuidedAdapter(), zh ? withHints(body.message) : body.message, opts);
     }
     await recordRun(db, session.id, run);
@@ -69,6 +71,7 @@ export async function POST(req: NextRequest) {
       mode: run.mode,
       model: run.modelName,
       liveFallbackReason: fellBack,
+      budgetNote: budget && !budget.allowed ? `Guided mode: ${budget.reason}. It resets at 08:00 Beijing time.` : null,
       steps: run.steps.map((s) => ({ tool: s.tool, ok: s.ok })),
       proposals,
       usage: { inputTokens: run.inputTokens, outputTokens: run.outputTokens },

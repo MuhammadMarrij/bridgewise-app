@@ -141,7 +141,7 @@ describe('formatting', () => {
 });
 
 describe('U03 the golden arithmetic', () => {
-  // These expectations come from docs/COMMAND_BRAIN.md section 1 R-2, not from
+  // These expectations come from the hand-verified golden scenario, not from
   // running the implementation. Target: USD 8,000.00 net.
   const target = 800000n;
 

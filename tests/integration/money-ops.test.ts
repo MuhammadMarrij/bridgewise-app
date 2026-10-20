@@ -44,12 +44,12 @@ describe('a real wallet statement', () => {
     await booksBalance(s.id);
   });
 
-  it('top-up and spending move the balance and write running balances', async () => {
+  it('a top-up moves the balance; an expense paid elsewhere is logged without touching it', async () => {
     const s = await student();
     await topUp(db, s, { currency: 'GBP', amount: '500.00', source: 'Bank of China transfer', idempotencyKey: 'tu-1' });
     await recordSpend(db, s, { currency: 'GBP', amount: '42.50', merchant: 'Tesco', category: 'food', idempotencyKey: 'sp-1' });
     const gbp = (await listTransactions(db, s.id, { currency: 'GBP' }));
-    expect(gbp[0]).toMatchObject({ kind: 'spend', amount: '-42.50', balanceAfter: '1457.50', category: 'food' });
+    expect(gbp[0]).toMatchObject({ kind: 'spend', amount: '-42.50', balanceAfter: '1500.00', category: 'food', reference: 'Paid elsewhere' });
     expect(gbp[1]).toMatchObject({ kind: 'topup', amount: '500.00', balanceAfter: '1500.00' });
     await booksBalance(s.id);
   });
@@ -60,12 +60,13 @@ describe('a real wallet statement', () => {
     const rows = await db.select().from(walletTransactions).where(eq(walletTransactions.idempotencyKey, 'same'));
     expect(rows).toHaveLength(1);
     const gbp = (await db.select().from(accounts).where(eq(accounts.sessionId, s.id))).find((a) => a.currency === 'GBP')!;
-    expect(gbp.balanceMinor).toBe(99000n);
+    expect(gbp.balanceMinor).toBe(100000n); // logged, not paid from the wallet
   });
 
-  it('refuses to spend more than the pocket holds', async () => {
+  it('refuses an expense in a currency the student has no pocket for, or a non-positive amount', async () => {
     const s = await student();
-    await expect(recordSpend(db, s, { currency: 'GBP', amount: '5000.00', merchant: 'X', category: 'other', idempotencyKey: 'big' })).rejects.toThrow(/you have/);
+    await expect(recordSpend(db, s, { currency: 'JPY', amount: '500', merchant: 'X', category: 'other', idempotencyKey: 'jp' })).rejects.toThrow(/no JPY pocket/);
+    await expect(recordSpend(db, s, { currency: 'GBP', amount: '0', merchant: 'X', category: 'other', idempotencyKey: 'z' })).rejects.toThrow(/above zero/);
   });
 });
 

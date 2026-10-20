@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getDb } from '@/lib/db/client';
-import { assertSameOrigin, clientKey, fail, json, parseBody, rateLimit } from '@/lib/api/http';
+import { assertSameOrigin, clientKey, fail, json, parseBody, rateLimit, assertLegacyDemoEnabled } from '@/lib/api/http';
 import { SUPPORTED_CURRENCIES } from '@/lib/domain/money';
 import { openStudentAccount } from '@/lib/services/wallet';
 import { SESSION_COOKIE } from '@/lib/services/workspace';
@@ -19,6 +19,8 @@ const Body = z
 
 export async function POST(req: NextRequest) {
   try {
+    // Opens a wallet without an account: tests and local runs only.
+    assertLegacyDemoEnabled();
     assertSameOrigin(req);
     await rateLimit(`onboard:${clientKey(req)}`, Number(process.env.SESSION_RATE_LIMIT_PER_MINUTE ?? 20), 60_000);
     const body = await parseBody(req, Body);

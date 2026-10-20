@@ -18,6 +18,9 @@ const Body = z
     dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     timezone: z.string().min(3).max(64).optional(),
     reserve: z.string().min(1).max(20).optional(),
+    // Optional: the payee's Alipay account and real name, for a real payment.
+    alipayAccount: z.string().trim().min(5).max(80).optional(),
+    alipayName: safeText(60).optional(),
   })
   .strict();
 

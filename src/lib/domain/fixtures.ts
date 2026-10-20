@@ -3,7 +3,7 @@
  * student or rate below corresponds to anything real, and none of it may be
  * presented as a market quote or a savings claim.
  *
- * Authority: docs/COMMAND_BRAIN.md section 1 R-2. If a test disagrees with that
+ * Authority: the hand-verified golden scenario. If a test disagrees with that
  * section, the test is wrong until the section is amended with a decision record.
  */
 import type { SimulatedRoute } from './types';

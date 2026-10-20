@@ -1,6 +1,6 @@
 // P0 model-access check: one minimal, non-sensitive structured-output call.
 // Proves the application has a usable runtime API credential. A coding-tool
-// subscription is NOT such a credential (MASTER_PLAYBOOK 3.2).
+// subscription is NOT such a credential.
 // Prints status only, never the key.
 const key = process.env.MODEL_API_KEY;
 const model = process.env.MODEL_NAME;

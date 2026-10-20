@@ -107,7 +107,7 @@ export const uuid = z.string().uuid();
 /**
  * Fixed-window limiter backed by Postgres, so every server instance shares one
  * count. One upsert per call.
- * ponytail: fixed window allows up to 2x the limit across a window edge; a
+ * fixed window allows up to 2x the limit across a window edge; a
  * sliding window or a token bucket in Redis if that ever matters.
  */
 export async function rateLimit(key: string, limit: number, windowMs: number): Promise<void> {

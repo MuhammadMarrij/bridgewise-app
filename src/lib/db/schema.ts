@@ -56,6 +56,8 @@ export const beneficiaries = pgTable('beneficiaries', {
   displayName: text('display_name').notNull(),
   reference: text('reference').notNull(),
   currency: text('currency').notNull(),
+  payoutIdentity: text('payout_identity'),
+  payoutName: text('payout_name'),
   // Bumped on any edit. A plan binds the version it was built from, so editing a
   // beneficiary invalidates every approval that referenced the old one.
   version: integer('version').notNull().default(0),
@@ -77,6 +79,9 @@ export const obligations = pgTable('obligations', {
   /** When BridgeWise sent the payment out of its book. Not the university's confirmation. */
   paidAt: instant('paid_at'),
   paidProposalId: uuid('paid_proposal_id'),
+  setAsideMinor: minor('set_aside_minor').notNull().default(0n),
+  setAsideAccountId: uuid('set_aside_account_id'),
+  setAsideAt: instant('set_aside_at'),
   version: integer('version').notNull().default(0),
 }, (t) => [index('obligations_session_idx').on(t.sessionId)]);
 

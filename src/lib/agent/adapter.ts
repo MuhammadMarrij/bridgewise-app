@@ -89,12 +89,15 @@ export function liveAdapter(): ModelAdapter {
     async complete({ system, messages, tools, signal }) {
       const body = {
         model: modelName,
-        max_tokens: Number(process.env.MAX_RUN_TOKENS ?? 2048),
-        system,
-        tools: tools.map((t) => ({
+        max_tokens: Number(process.env.MAX_RUN_TOKENS ?? 500),
+        // The system prompt and tool list are identical on every turn: cache them,
+        // so repeat turns read them at a fraction of the input price.
+        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+        tools: tools.map((t, i) => ({
           name: t.name,
           description: t.description,
           input_schema: t.inputSchema,
+          ...(i === tools.length - 1 ? { cache_control: { type: 'ephemeral' } } : {}),
         })),
         messages: toProviderMessages(messages),
       };
@@ -119,7 +122,7 @@ export function liveAdapter(): ModelAdapter {
       const payload = (await res.json()) as {
         content?: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>;
         stop_reason?: string;
-        usage?: { input_tokens?: number; output_tokens?: number };
+        usage?: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
       };
       const parts = payload.content ?? [];
       const text = parts.filter((p) => p.type === 'text').map((p) => p.text ?? '').join('\n') || null;
@@ -132,7 +135,9 @@ export function liveAdapter(): ModelAdapter {
         toolCalls,
         stopReason: payload.stop_reason ?? 'end_turn',
         // Reported only when the API actually returns it. Never invented.
-        inputTokens: payload.usage?.input_tokens,
+        // Budget-equivalent input: fresh tokens, cache writes in full, cache reads at a tenth.
+        inputTokens: payload.usage?.input_tokens === undefined ? undefined
+          : payload.usage.input_tokens + (payload.usage.cache_creation_input_tokens ?? 0) + Math.ceil((payload.usage.cache_read_input_tokens ?? 0) / 10),
         outputTokens: payload.usage?.output_tokens,
       };
     },
@@ -180,7 +185,7 @@ export function openaiCompatibleAdapter(): ModelAdapter {
     async complete({ system, messages, tools, signal }) {
       const body = {
         model: modelName,
-        max_tokens: Number(process.env.MAX_RUN_TOKENS ?? 2048),
+        max_tokens: Number(process.env.MAX_RUN_TOKENS ?? 500),
         tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.inputSchema } })),
         messages: [{ role: 'system', content: system }, ...toOpenAiMessages(messages)],
       };

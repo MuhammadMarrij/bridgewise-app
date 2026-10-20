@@ -54,7 +54,9 @@ export interface RunStep {
   readonly resultSummary: unknown;
 }
 
-const MAX_STEPS = Number(process.env.MAX_RUN_STEPS ?? 6);
+const MAX_STEPS = Number(process.env.MAX_RUN_STEPS ?? 4);
+/** Budget-equivalent tokens (input + 5 x output) one answer may use. About $0.006 at Haiku 5.5 prices. */
+const MAX_TURN_TOKENS = Number(process.env.MAX_TURN_TOKENS ?? 60_000);
 const TIMEOUT_MS = 30_000;
 const MAX_INPUT_CHARS = 4_000;
 
@@ -135,6 +137,14 @@ export async function runAgentTurn(
 
       if (turn.inputTokens !== undefined) inputTokens = (inputTokens ?? 0) + turn.inputTokens;
       if (turn.outputTokens !== undefined) outputTokens = (outputTokens ?? 0) + turn.outputTokens;
+
+      // Per-answer ceiling: one answer may not spend more than this, however many
+      // tool rounds the model wants. The daily and lifetime caps are in budget.ts.
+      if ((inputTokens ?? 0) + 5 * (outputTokens ?? 0) > MAX_TURN_TOKENS && turn.toolCalls.length > 0) {
+        reply = turn.text || 'I stopped here to stay within the AI budget for one answer. Ask a narrower question and I will continue.';
+        status = 'STEP_LIMIT';
+        break;
+      }
 
       if (turn.toolCalls.length === 0) {
         reply = turn.text ?? '';

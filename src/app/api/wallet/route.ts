@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { desc, eq, isNotNull, and } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { fail, json, requireSession } from '@/lib/api/http';
-import { getWallet, listProposals } from '@/lib/services/wallet';
+import { getWallet, listProposals, reconcilePayouts } from '@/lib/services/wallet';
 import { profileOf } from '@/lib/agent/bank-tools';
 import { actionProposals, obligations, rateAlerts } from '@/lib/db/schema';
 import { formatAmount, type Currency } from '@/lib/domain/money';
@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSession(req);
+    // Finish any payout Alipay made that our books missed. Never blocks the wallet.
+    await reconcilePayouts(getDb(), session).catch(() => 0);
     const db = getDb();
     const { home, study } = profileOf({ db, session } as never);
     const [wallet, insights] = await Promise.all([
@@ -47,6 +49,7 @@ export async function GET(req: NextRequest) {
         daysLeft: Math.floor((b.deadlineAt.getTime() - now) / 86_400_000),
         confirmed: !!b.confirmedAt,
         paid: !!b.paidAt,
+        setAside: b.setAsideMinor > 0n && !b.paidAt ? formatAmount(b.setAsideMinor, b.currency as Currency) : null,
       })),
       alerts: alerts.map((a) => ({ id: a.id, pair: `${a.base}/${a.quote}`, direction: a.direction, threshold: a.threshold, firedAt: a.firedAt })),
       proposals: proposals.map((p) => ({

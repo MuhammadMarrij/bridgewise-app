@@ -74,8 +74,11 @@ function useCountdown(iso: string): string {
 
 export function ApprovalCard({
   p, onApprove, onDecline, busy,
-}: { p: Json; onApprove: (p: Json) => void; onDecline: (p: Json) => void; busy?: boolean }) {
+}: { p: Json; onApprove: (p: Json, password?: string) => void; onDecline: (p: Json) => void; busy?: boolean }) {
   const t = p.terms ?? {};
+  // Real money leaving through a provider needs the password again.
+  const payout = p.kind === 'send' || p.kind === 'withdraw' || (p.kind === 'pay_bill' && t.rail === 'alipay');
+  const [pw, setPw] = useState('');
   const left = useCountdown(p.expiresAt);
   const status = p.status === 'PENDING' && left === 'expired' ? 'EXPIRED' : p.status;
   const done = status === 'EXECUTED';
@@ -135,8 +138,10 @@ export function ApprovalCard({
         </dl>
         {done && p.result && (
           <p className="small" style={{ color: 'var(--ok)' }}>
-            {p.kind === 'pay_bill'
-              ? `Sent ${p.result.paid} to ${p.result.to}. The university confirms receipt on their side.`
+            {p.kind === 'pay_bill' && p.result.status === 'SET_ASIDE'
+              ? `${p.result.setAside} set aside for ${p.result.for}. Pay it through their own portal with reference ${p.result.reference}, then mark the bill paid.`
+              : p.kind === 'pay_bill'
+              ? `Paid ${p.result.paid} to ${p.result.to} through Alipay.`
               : p.kind === 'send'
               ? `Sent ${p.result.sent} to ${p.result.to}.`
               : p.kind === 'withdraw'
@@ -146,8 +151,14 @@ export function ApprovalCard({
         )}
         {status === 'PENDING' && (
           <>
+            {payout && (
+              <div style={{ marginBottom: '.6rem' }}>
+                <label htmlFor={`pw-${p.id}`}>Your password, to send real money</label>
+                <input id={`pw-${p.id}`} type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+              </div>
+            )}
             <div className="actions">
-              <button className="btn" disabled={busy} onClick={() => onApprove(p)}>
+              <button className="btn" disabled={busy || (payout && !pw)} onClick={() => onApprove(p, payout ? pw : undefined)}>
                 <Icon name="check" size={16} /> {busy ? 'Approving…' : 'Approve'}
               </button>
               <button className="btn secondary" disabled={busy} onClick={() => onDecline(p)}>Decline</button>
@@ -213,7 +224,7 @@ export function Assistant({
   messages, onSend, busy, proposals, onApprove, onDecline, approving, open, onClose, name,
 }: {
   messages: ChatMsg[]; onSend: (text: string) => void; busy: boolean; proposals: Map<string, Json>;
-  onApprove: (p: Json) => void; onDecline: (p: Json) => void; approving: string | null;
+  onApprove: (p: Json, password?: string) => void; onDecline: (p: Json) => void; approving: string | null;
   open: boolean; onClose: () => void; name: string;
 }) {
   const [text, setText] = useState('');

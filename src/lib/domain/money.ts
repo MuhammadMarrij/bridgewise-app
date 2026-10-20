@@ -3,7 +3,7 @@
  *
  * Every amount that crosses a boundary (JSON, database, UI) is a decimal STRING.
  * Every amount in arithmetic is a bigint of minor units plus its currency.
- * COMMAND_BRAIN section 1 R-2 is the oracle these functions must reproduce exactly.
+ * The hand-verified golden scenario is the oracle these functions must reproduce exactly.
  */
 
 /**

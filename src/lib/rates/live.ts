@@ -36,7 +36,7 @@ export class RateUnavailableError extends Error {
   }
 }
 
-// ponytail: in-process cache. ECB publishes once a working day, so a short TTL
+// in-process cache. ECB publishes once a working day, so a short TTL
 // is plenty and avoids hammering a free endpoint. Redis if this ever runs
 // multi-instance.
 const TTL_MS = Number(process.env.FX_CACHE_TTL_MS ?? 15 * 60_000);

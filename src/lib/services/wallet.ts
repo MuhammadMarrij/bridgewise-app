@@ -13,7 +13,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { accounts, actionProposals, beneficiaries, ledgerEntries, linkedSources, obligations, payouts, recipients, sessions } from '../db/schema';
-import { alipayTransfer } from '../connectors/live';
+import { alipayTransfer, alipayTransferStatus } from '../connectors/live';
 import {
   CURRENCY_REGISTRY,
   formatAmount,
@@ -340,6 +340,7 @@ export async function executeProposal(
   session: ResolvedSession,
   id: string,
   expectedTermsHash: string,
+  opts: { reconcile?: boolean } = {},
 ) {
   const result = await db.transaction(async (tx) => {
     const proposal = (
@@ -350,7 +351,7 @@ export async function executeProposal(
     if (!proposal) throw new AppError('NOT_FOUND', 'no such proposal');
     if (proposal.status === 'EXECUTED') return { replay: true, proposal };
     if (proposal.status !== 'PENDING') throw new AppError('PLAN_NOT_APPROVED', `this proposal is ${proposal.status.toLowerCase()}`);
-    if (proposal.expiresAt.getTime() <= Date.now()) {
+    if (proposal.expiresAt.getTime() <= Date.now() && !opts.reconcile) {
       await tx.update(actionProposals).set({ status: 'EXPIRED' }).where(eq(actionProposals.id, id));
       throw new AppError('QUOTE_EXPIRED', 'this quote expired; ask for a fresh one');
     }
@@ -362,13 +363,13 @@ export async function executeProposal(
     }
 
     if (proposal.kind === 'withdraw') {
-      return executeWithdraw(tx as unknown as Db, session, proposal);
+      return executeWithdraw(tx as unknown as Db, session, proposal, db);
     }
     if (proposal.kind === 'send') {
-      return executeSend(tx as unknown as Db, session, proposal);
+      return executeSend(tx as unknown as Db, session, proposal, db);
     }
     if (proposal.kind === 'pay_bill') {
-      return executeBillPayment(tx as unknown as Db, session, proposal);
+      return executeBillPayment(tx as unknown as Db, session, proposal, db);
     }
     if (proposal.kind !== 'convert') {
       throw new AppError('UNSUPPORTED', `${proposal.kind} cannot be executed`);
@@ -430,7 +431,7 @@ export async function executeProposal(
 interface BillTerms {
   obligationId: string; obligationVersion: number; beneficiaryId: string; beneficiaryReference: string;
   billAmount: string; billCurrency: Currency; fromPocketId: string; fromCurrency: Currency;
-  debitAmount: string; sessionId: string; payee: string;
+  debitAmount: string; sessionId: string; payee: string; rail?: 'alipay' | 'set_aside'; payeeAccount?: string | null;
 }
 
 /**
@@ -441,11 +442,7 @@ interface BillTerms {
  * nothing about whether the bill or the payee changed underneath them, which is
  * exactly how a redirected payment happens.
  */
-async function executeBillPayment(
-  tx: Db,
-  session: ResolvedSession,
-  proposal: typeof actionProposals.$inferSelect,
-) {
+async function executeBillPayment(tx: Db, session: ResolvedSession, proposal: typeof actionProposals.$inferSelect, outer: Db) {
   const t = proposal.termsJson as BillTerms;
   if (t.sessionId !== session.id) throw new AppError('NOT_FOUND', 'no such proposal');
 
@@ -474,6 +471,30 @@ async function executeBillPayment(
   const reserve = bill.reserveCurrency === t.fromCurrency ? bill.reserveMinor : 0n;
   if (available - debit < reserve) throw new AppError('BREACHES_RESERVE', 'this would now breach your living reserve');
 
+  const now0 = new Date();
+  if (t.rail !== 'alipay') {
+    // No rail can reach this payee: ring-fence the money in the pocket until the
+    // student pays through the payee's own channel and marks the bill paid.
+    await tx.update(accounts).set({ reservedMinor: pocket.reservedMinor + debit, version: pocket.version + 1 }).where(eq(accounts.id, pocket.id));
+    await tx.update(obligations).set({ setAsideMinor: debit, setAsideAccountId: pocket.id, setAsideAt: now0, paidProposalId: proposal.id }).where(eq(obligations.id, bill.id));
+    const kept = { setAside: `${t.debitAmount} ${t.fromCurrency}`, for: t.payee, reference: t.beneficiaryReference, status: 'SET_ASIDE' };
+    await tx.update(actionProposals).set({ status: 'EXECUTED', decidedAt: now0, resultJson: kept }).where(eq(actionProposals.id, proposal.id));
+    await appendAudit(tx, {
+      sessionId: session.id, correlationId: proposal.id, type: 'bill.set_aside', actor: 'user', outcome: 'allowed',
+      payload: { proposalId: proposal.id, termsHash: proposal.termsHash, ...kept },
+    });
+    return { replay: false, proposal: { ...proposal, status: 'EXECUTED', resultJson: kept } };
+  }
+  if (!payee.payoutIdentity || !payee.payoutName || payee.payoutIdentity !== t.payeeAccount || t.billCurrency !== 'CNY') {
+    throw new AppError('TERMS_CHANGED', 'the payee changed since you approved');
+  }
+  await payoutPending(outer, session.id, proposal.id, t.billAmount);
+  const paid = await alipayTransfer({
+    outBizNo: proposal.id.replace(/-/g, ''), amount: t.billAmount,
+    identity: payee.payoutIdentity, name: payee.payoutName, title: `BridgeWise · ${t.payee}`,
+  });
+  await tx.update(payouts).set({ status: 'PAID', providerRef: paid.orderId, payee: t.payee }).where(eq(payouts.proposalId, proposal.id));
+
   await tx.update(accounts).set({ balanceMinor: pocket.balanceMinor - debit, version: pocket.version + 1 }).where(eq(accounts.id, pocket.id));
 
   const entries =
@@ -493,7 +514,7 @@ async function executeBillPayment(
   const now = new Date();
   await tx.update(obligations).set({ paidAt: now, paidProposalId: proposal.id }).where(eq(obligations.id, bill.id));
   await postStatement(tx, {
-    sessionId: session.id, accountId: pocket.id, kind: 'bill', description: `${bill.description} · ref ${t.beneficiaryReference}`,
+    sessionId: session.id, accountId: pocket.id, kind: 'bill', description: `${bill.description} · ${t.payee}`, reference: paid.orderId,
     category: /tuition/i.test(bill.description) ? 'tuition' : /rent/i.test(bill.description) ? 'rent' : 'bills',
     currency: t.fromCurrency, amountMinor: -debit, balanceAfterMinor: pocket.balanceMinor - debit,
     counterparty: t.payee, proposalId: proposal.id,
@@ -505,7 +526,8 @@ async function executeBillPayment(
     to: t.payee,
     reference: t.beneficiaryReference,
     debited: `${t.debitAmount} ${t.fromCurrency}`,
-    status: 'SENT_TO_PAYEE',
+    alipayOrder: paid.orderId,
+    status: 'PAID',
   };
   await tx.update(actionProposals).set({ status: 'EXECUTED', decidedAt: now, resultJson: outcome }).where(eq(actionProposals.id, proposal.id));
   await appendAudit(tx, {
@@ -523,7 +545,7 @@ interface SendTermsLite {
 }
 
 /** Sends to a saved recipient inside the caller's transaction, re-checking the payee. */
-async function executeSend(tx: Db, session: ResolvedSession, proposal: typeof actionProposals.$inferSelect) {
+async function executeSend(tx: Db, session: ResolvedSession, proposal: typeof actionProposals.$inferSelect, outer: Db) {
   const t = proposal.termsJson as SendTermsLite;
   if (t.sessionId !== session.id) throw new AppError('NOT_FOUND', 'no such proposal');
   const r = (await tx.select().from(recipients).where(eq(recipients.id, t.recipientId)).for('update'))[0];
@@ -544,14 +566,12 @@ async function executeSend(tx: Db, session: ResolvedSession, proposal: typeof ac
   // Every check has passed: the money leaves through Alipay now. If anything
   // below fails the transaction rolls back, and a retry reuses the same
   // out_biz_no, which Alipay will not pay twice.
+  await payoutPending(outer, session.id, proposal.id, t.receiveAmount);
   const paid = await alipayTransfer({
     outBizNo: proposal.id.replace(/-/g, ''), amount: t.receiveAmount,
     identity: r.payoutIdentity, name: r.payoutName, title: `BridgeWise · ${r.name}`,
   });
-  await tx.insert(payouts).values({
-    sessionId: session.id, proposalId: proposal.id, provider: 'alipay', currency: t.receiveCurrency,
-    amountMinor: credit, payee: r.accountLabel, status: 'PAID', providerRef: paid.orderId,
-  });
+  await tx.update(payouts).set({ status: 'PAID', providerRef: paid.orderId, payee: r.accountLabel }).where(eq(payouts.proposalId, proposal.id));
   const after = pocket.balanceMinor - debit;
   await tx.update(accounts).set({ balanceMinor: after, version: pocket.version + 1 }).where(eq(accounts.id, pocket.id));
   await tx.insert(ledgerEntries).values(
@@ -585,7 +605,7 @@ async function executeSend(tx: Db, session: ResolvedSession, proposal: typeof ac
 /* --------------------------------------------------------------- withdraw */
 
 /** Moves money to the student's own linked wallet or bank, re-checking the source under lock. */
-async function executeWithdraw(tx: Db, session: ResolvedSession, proposal: typeof actionProposals.$inferSelect) {
+async function executeWithdraw(tx: Db, session: ResolvedSession, proposal: typeof actionProposals.$inferSelect, outer: Db) {
   const t = proposal.termsJson as {
     sessionId: string; sourceId: string; sourceLabel: string; sourceKind: string; receiveAmount: string;
     receiveCurrency: Currency; fromPocketId: string; fromCurrency: Currency; debitAmount: string;
@@ -604,14 +624,12 @@ async function executeWithdraw(tx: Db, session: ResolvedSession, proposal: typeo
   if (src.provider !== 'alipay' || !src.payoutIdentity || !src.holder || t.receiveCurrency !== 'CNY') {
     throw new AppError('UNSUPPORTED', `Moving money to ${src.label} isn't available yet`);
   }
+  await payoutPending(outer, session.id, proposal.id, t.receiveAmount);
   const paid = await alipayTransfer({
     outBizNo: proposal.id.replace(/-/g, ''), amount: t.receiveAmount,
     identity: src.payoutIdentity, name: src.holder, title: 'BridgeWise · to my Alipay',
   });
-  await tx.insert(payouts).values({
-    sessionId: session.id, proposalId: proposal.id, provider: 'alipay', currency: t.receiveCurrency,
-    amountMinor: credit, payee: src.label, status: 'PAID', providerRef: paid.orderId,
-  });
+  await tx.update(payouts).set({ status: 'PAID', providerRef: paid.orderId, payee: src.label }).where(eq(payouts.proposalId, proposal.id));
   const out = { reference: paid.orderId };
   const after = pocket.balanceMinor - debit;
   await tx.update(accounts).set({ balanceMinor: after, version: pocket.version + 1 }).where(eq(accounts.id, pocket.id));
@@ -641,4 +659,41 @@ async function executeWithdraw(tx: Db, session: ResolvedSession, proposal: typeo
     payload: { proposalId: proposal.id, termsHash: proposal.termsHash, ...outcome },
   });
   return { replay: false, proposal: { ...proposal, status: 'EXECUTED', resultJson: outcome } };
+}
+
+/* ---------------------------------------------------------- payout safety */
+
+/**
+ * Written and committed on its own connection BEFORE Alipay is called. If the
+ * transfer succeeds and our transaction then fails, this row survives as
+ * PENDING, and reconcilePayouts finishes the booking instead of losing it.
+ */
+async function payoutPending(outer: Db, sessionId: string, proposalId: string, amount: string) {
+  await outer.insert(payouts).values({
+    sessionId, proposalId, provider: 'alipay', currency: 'CNY', amountMinor: parseAmount(amount, 'CNY'), payee: '', status: 'PENDING',
+  }).onConflictDoNothing();
+}
+
+/**
+ * Finishes payouts that Alipay may have made but our books did not record:
+ * a PENDING row older than a minute whose proposal is still PENDING is
+ * executed again. Alipay will not pay the same number twice; if it already
+ * paid, its query answer completes the booking. Runs when the student opens
+ * the wallet. A payout Alipay never made, on a proposal that can no longer
+ * run, is marked FAILED.
+ */
+export async function reconcilePayouts(db: Db, session: ResolvedSession): Promise<number> {
+  const stale = await db.select().from(payouts).where(and(eq(payouts.sessionId, session.id), eq(payouts.status, 'PENDING')));
+  let fixed = 0;
+  for (const p of stale) {
+    if (Date.now() - p.createdAt.getTime() < 60_000) continue;
+    const prop = (await db.select().from(actionProposals).where(eq(actionProposals.id, p.proposalId)))[0];
+    if (prop?.status === 'PENDING') {
+      try { await executeProposal(db, session, prop.id, prop.termsHash, { reconcile: true }); fixed++; continue; }
+      catch { /* fall through: decide below */ }
+    }
+    const known = await alipayTransferStatus(p.proposalId.replace(/-/g, '')).catch(() => null);
+    if (known && !known.paid) await db.update(payouts).set({ status: 'FAILED' }).where(eq(payouts.id, p.id));
+  }
+  return fixed;
 }

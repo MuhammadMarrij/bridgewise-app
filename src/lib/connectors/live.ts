@@ -197,11 +197,20 @@ export async function alipayTransfer(input: { outBizNo: string; amount: string; 
   let r: Awaited<ReturnType<typeof call>> | undefined;
   for (let attempt = 0; attempt < 3 && !r; attempt++) {
     try { r = await call(); } catch (e) {
-      if (attempt === 2) throw new AppError('DEPENDENCY_UNAVAILABLE', 'Alipay did not respond. Nothing was sent; try again in a moment.');
+      if (attempt === 2) {
+        // No answer: maybe it paid, maybe not. Ask before reporting either.
+        const known = await alipayTransferStatus(input.outBizNo).catch(() => null);
+        if (known?.paid) return { orderId: known.orderId, fundOrderId: null };
+        throw new AppError('DEPENDENCY_UNAVAILABLE', 'Alipay did not respond. Nothing was sent; try again in a moment.');
+      }
       await new Promise((ok) => setTimeout(ok, 600 * (attempt + 1)));
     }
   }
   if (r!.code !== '10000') {
+    // Alipay refuses a repeat of an out_biz_no it already paid (verified in the
+    // sandbox: PAYMENT_INFO_INCONSISTENCY). That is a success we already had.
+    const known = await alipayTransferStatus(input.outBizNo).catch(() => null);
+    if (known?.paid) return { orderId: known.orderId, fundOrderId: null };
     const sub = String(r!.subCode ?? '');
     if (/PAYEE|PAYCARD|RECEIVE/.test(sub)) {
       throw new AppError('VALIDATION_FAILED', `Alipay refused the payee: ${r!.subMsg ?? sub}. Check the account and the real name.`);
@@ -212,4 +221,12 @@ export async function alipayTransfer(input: { outBizNo: string; amount: string; 
     throw new AppError('DEPENDENCY_UNAVAILABLE', 'Alipay is still processing this transfer; approve again in a minute');
   }
   return { orderId: String(r!.orderId), fundOrderId: r!.payFundOrderId ? String(r!.payFundOrderId) : null };
+}
+
+/** What Alipay knows about a transfer number: paid (with its order id) or not. */
+export async function alipayTransferStatus(outBizNo: string): Promise<{ paid: boolean; orderId: string }> {
+  const q = await alipay().exec('alipay.fund.trans.common.query', {
+    bizContent: { out_biz_no: outBizNo, product_code: 'TRANS_ACCOUNT_NO_PWD', biz_scene: 'DIRECT_TRANSFER' },
+  });
+  return { paid: q.code === '10000' && q.status === 'SUCCESS', orderId: String(q.orderId ?? '') };
 }

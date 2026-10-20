@@ -29,15 +29,15 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { d
 /* ------------------------------------------------------------- onboarding */
 
 const PERSONAS = [
-  { id: 'pk-cn', label: 'From Pakistan, studying in China', home: 'PKR', study: 'CNY', homeBalance: '900000', studyBalance: '3200.00' },
-  { id: 'in-cn', label: 'From India, studying in China', home: 'INR', study: 'CNY', homeBalance: '450000.00', studyBalance: '2500.00' },
-  { id: 'cn-uk', label: 'From China, studying in the UK', home: 'CNY', study: 'GBP', homeBalance: '120000.00', studyBalance: '900.00' },
-  { id: 'pk-us', label: 'From Pakistan, studying in the US', home: 'PKR', study: 'USD', homeBalance: '2500000', studyBalance: '450.00' },
+  { id: 'pk-cn', label: 'From Pakistan, studying in China', home: 'PKR', study: 'CNY', },
+  { id: 'in-cn', label: 'From India, studying in China', home: 'INR', study: 'CNY', },
+  { id: 'cn-uk', label: 'From China, studying in the UK', home: 'CNY', study: 'GBP', },
+  { id: 'pk-us', label: 'From Pakistan, studying in the US', home: 'PKR', study: 'USD', },
 ];
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<'signup' | 'signin'>('signup');
-  const [form, setForm] = useState({ name: '', email: '', password: '', homeCurrency: 'PKR', studyCurrency: 'CNY', homeBalance: '900000', studyBalance: '3200.00' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', homeCurrency: 'PKR', studyCurrency: 'CNY', });
   const [persona, setPersona] = useState('pk-cn');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,26 +87,24 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               <div className="stack" style={{ gap: '.45rem' }}>
                 {PERSONAS.map((p) => (
                   <button type="button" key={p.id} className="persona" aria-pressed={persona === p.id}
-                    onClick={() => { setPersona(p.id); setForm((f) => ({ ...f, homeCurrency: p.home, studyCurrency: p.study, homeBalance: p.homeBalance, studyBalance: p.studyBalance })); }}>
+                    onClick={() => { setPersona(p.id); setForm((f) => ({ ...f, homeCurrency: p.home, studyCurrency: p.study })); }}>
                     <span className="row" style={{ gap: '.5rem' }}><CcyBadge ccy={p.home} /> → <CcyBadge ccy={p.study} /> <span>{p.label}</span></span>
                   </button>
                 ))}
               </div>
               <div className="field-row">
                 <div>
-                  <label htmlFor="hc">Money from home</label>
+                  <label htmlFor="hc">Home currency</label>
                   <div className="pair">
-                    <input id="hc" inputMode="decimal" value={form.homeBalance} onChange={(e) => set('homeBalance', e.target.value)} />
-                    <select aria-label="Home currency" value={form.homeCurrency} onChange={(e) => set('homeCurrency', e.target.value)}>
+                    <select id="hc" value={form.homeCurrency} onChange={(e) => set('homeCurrency', e.target.value)}>
                       {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="sc">Money where you study</label>
+                  <label htmlFor="sc">Currency where you study</label>
                   <div className="pair">
-                    <input id="sc" inputMode="decimal" value={form.studyBalance} onChange={(e) => set('studyBalance', e.target.value)} />
-                    <select aria-label="Study currency" value={form.studyCurrency} onChange={(e) => set('studyCurrency', e.target.value)}>
+                    <select id="sc" value={form.studyCurrency} onChange={(e) => set('studyCurrency', e.target.value)}>
                       {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
                     </select>
                   </div>
@@ -118,7 +116,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           <button className="btn" disabled={busy} style={{ justifyContent: 'center' }}>
             {busy ? 'Please wait…' : mode === 'signup' ? 'Create my account' : 'Sign in'}
           </button>
-          <p className="faint small">Starting balances are test funds in BridgeWise&rsquo;s ledger. Rates and provider quotes are live.</p>
+          <p className="faint small">Your wallet starts empty. Add money with Alipay or a bank card.</p>
         </form>
       </section>
     </div>
@@ -144,7 +142,7 @@ export function Home({ data, ask, approve, decline, approving, go, sheet }: Ctx)
             <button className="btn ghost small" onClick={() => sheet('add')}><Icon name="down" size={14} /> Add money</button>
             <button className="btn ghost small" onClick={() => go('send')}><Icon name="send" size={14} /> Send</button>
             <button className="btn ghost small" onClick={() => go('wallet')}><Icon name="swap" size={14} /> Convert</button>
-            <button className="btn ghost small" onClick={() => sheet('pay')}><Icon name="card" size={14} /> Pay</button>
+            <button className="btn ghost small" onClick={() => sheet('pay')}><Icon name="card" size={14} /> Log expense</button>
             <button className="btn ghost small" onClick={() => go('bills')}><Icon name="bill" size={14} /> Bills</button>
           </div>
         </section>
@@ -235,7 +233,7 @@ export function Wallet({ data, refresh, approve, decline, approving, sheet, go }
     <>
       <div className="actions">
         <button className="btn" onClick={() => sheet('add')}><Icon name="down" size={15} /> Add money</button>
-        <button className="btn secondary" onClick={() => sheet('pay')}><Icon name="card" size={15} /> Pay</button>
+        <button className="btn secondary" onClick={() => sheet('pay')}><Icon name="card" size={15} /> Log expense</button>
         <button className="btn secondary" onClick={() => go('send')}><Icon name="send" size={15} /> Send</button>
         <button className="btn secondary" onClick={() => go('activity')}><Icon name="clock" size={15} /> Statement</button>
       </div>
@@ -284,7 +282,7 @@ export function Bills({ data, refresh, ask, approve, decline, approving }: Ctx) 
     setBusy('read'); setError(null);
     try {
       const x = await api('/api/bills/parse', { method: 'POST', body: JSON.stringify({ text }) });
-      setDraft({ description: 'Tuition', amount: x.amount ?? '', currency: x.currency ?? study, payee: x.payee ?? '', reference: x.reference ?? '', dueDate: x.dueDate ?? '', dueTime: '17:00', reserve: '', missing: x.missing });
+      setDraft({ description: 'Tuition', amount: x.amount ?? '', currency: x.currency ?? study, payee: x.payee ?? '', reference: x.reference ?? '', dueDate: x.dueDate ?? '', dueTime: '17:00', reserve: '', alipayAccount: '', alipayName: '', missing: x.missing });
     } catch (e: any) { setError(e.message); } finally { setBusy(null); }
   }
   async function save() {
@@ -292,11 +290,16 @@ export function Bills({ data, refresh, ask, approve, decline, approving }: Ctx) 
     try {
       const { missing, ...body } = draft!;
       void missing;
-      const made = await api('/api/bills', { method: 'POST', body: JSON.stringify({ ...body, reserve: body.reserve || undefined, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
+      const made = await api('/api/bills', { method: 'POST', body: JSON.stringify({ ...body, reserve: body.reserve || undefined, alipayAccount: body.alipayAccount || undefined, alipayName: body.alipayName || undefined, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
       await api(`/api/bills/${made.billId}/pay`, { method: 'POST', body: '{}' }).catch((e) => setError(`Saved. ${e.message}`));
       setDraft(null); setText('');
       await refresh();
     } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+  }
+  async function markPaid(id: string) {
+    setBusy(id); setError(null);
+    try { await api(`/api/bills/${id}/paid`, { method: 'POST', body: '{}' }); await refresh(); }
+    catch (e: any) { setError(e.message); } finally { setBusy(null); }
   }
   async function pay(id: string) {
     setBusy(id); setError(null);
@@ -332,7 +335,10 @@ export function Bills({ data, refresh, ask, approve, decline, approving }: Ctx) 
               <div><label htmlFor="b-d">Due</label><input id="b-d" type="date" value={d.dueDate} onChange={(e) => setDraft({ ...d, dueDate: e.target.value })} /></div>
               <div><label htmlFor="b-k">Keep at least ({home})</label><input id="b-k" inputMode="decimal" value={d.reserve} onChange={(e) => setDraft({ ...d, reserve: e.target.value })} placeholder="e.g. 10000" />
                 <p className="hint">We&rsquo;ll refuse any payment that leaves you less to live on.</p></div>
+              <div><label htmlFor="b-al">Payee&rsquo;s Alipay (optional)</label><input id="b-al" value={d.alipayAccount} onChange={(e) => setDraft({ ...d, alipayAccount: e.target.value })} placeholder="Mobile number or email" autoComplete="off" /></div>
+              <div><label htmlFor="b-an">Real name on that Alipay</label><input id="b-an" value={d.alipayName} onChange={(e) => setDraft({ ...d, alipayName: e.target.value })} autoComplete="off" /></div>
             </div>
+            <p className="hint">With the payee&rsquo;s Alipay, BridgeWise pays the bill straight into it in CNY. Without it, approving sets the money aside so it can&rsquo;t be spent, and you pay through the payee&rsquo;s own portal.</p>
             <div className="actions"><button className="btn" disabled={!!busy} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save and prepare payment'}</button>
               <button className="btn secondary" onClick={() => setDraft(null)}>Cancel</button></div>
           </div>
@@ -350,7 +356,8 @@ export function Bills({ data, refresh, ask, approve, decline, approving }: Ctx) 
             <span className="icon-tile"><Icon name="bill" /></span>
             <div className="grow"><div className="title">{b.description}</div><div className="faint small">Due {fmtDate(b.dueAt)}</div></div>
             <strong className="num">{money(b.amount, b.currency)}</strong>
-            {b.paid ? <span className="tag ok">Sent</span>
+            {b.paid ? <span className="tag ok">Paid</span>
+              : b.setAside ? <><span className="tag brand">Set aside</span><button className="btn secondary small" disabled={busy === b.id} onClick={() => markPaid(b.id)}>{busy === b.id ? '…' : 'Mark as paid'}</button></>
               : <button className="btn small" disabled={busy === b.id} onClick={() => pay(b.id)}>{busy === b.id ? '…' : 'Pay'}</button>}
           </div>
         ))}

@@ -16,6 +16,14 @@ async function open(page: Page, name = 'Wei') {
   await page.getByRole('button', { name: 'From China, studying in the UK' }).click();
   await page.getByRole('button', { name: 'Create my account' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(`, ${name}$`) })).toBeVisible();
+  // Wallets start empty; fund this one the way a top-up would.
+  const origin = new URL(page.url()).origin;
+  for (const [currency, amount] of [['CNY', '120000.00'], ['GBP', '900.00']]) {
+    const r = await page.request.post('/api/topup', { headers: { origin }, data: { currency, amount, source: 'Transfer from home bank', idempotencyKey: `seed-${currency}-${Date.now()}` } });
+    expect(r.ok()).toBe(true);
+  }
+  await page.reload();
+  await expect(page.getByRole('heading', { name: new RegExp(`, ${name}$`) })).toBeVisible();
 }
 
 const INVOICE = `King's College London - Student Finance Office
@@ -33,7 +41,7 @@ test('a new student opens an account and sees every pocket valued live', async (
   await expect(page.getByText('BridgeWise noticed')).toBeVisible();
 });
 
-test('the assistant reads an invoice, prepares a payment, and nothing moves until approval', async ({ page }) => {
+test('the assistant reads an invoice, sets the tuition aside on approval, and the student marks it paid', async ({ page }) => {
   await open(page);
   const box = page.getByPlaceholder('Ask anything, or paste an invoice…');
   await box.fill(INVOICE);
@@ -45,9 +53,12 @@ test('the assistant reads an invoice, prepares a payment, and nothing moves unti
   await expect(page.getByText('120,000.00').first()).toBeVisible();
 
   await approve.click();
-  await expect(page.getByText(/King's College London — done/)).toBeVisible({ timeout: 15_000 });
-  // The payment is on the statement, tagged with its reference.
-  await expect(page.getByText(/Tuition · ref K2104471/)).toBeVisible();
+  // No rail reaches the university, so the money is set aside, not pretended away.
+  await expect(page.getByText(/set aside for King's College London/).first()).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Bills' }).first().click();
+  await expect(page.getByText('Set aside', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Mark as paid' }).click();
+  await expect(page.getByText('Paid', { exact: true })).toBeVisible();
 });
 
 test('a conversion is quoted with its fee before anything is approved', async ({ page }) => {
@@ -86,7 +97,7 @@ test('every control on Home has an accessible name', async ({ page }) => {
   expect(unnamed).toEqual([]);
 });
 
-test('add money, pay for something, and see both on the statement with running balances', async ({ page }) => {
+test('add money through a real rail, log an expense paid elsewhere, and see both on the statement', async ({ page }) => {
   await open(page);
   await page.getByRole('button', { name: 'Wallet' }).first().click();
   // Add money offers only real rails: Alipay's cashier and a card through Stripe.
@@ -103,18 +114,20 @@ test('add money, pay for something, and see both on the statement with running b
   expect(r.ok()).toBe(true);
   await page.reload();
 
-  await page.getByRole('button', { name: 'Pay' }).first().click();
+  await page.getByRole('button', { name: 'Log expense' }).first().click();
   const pay = page.getByRole('dialog');
   await pay.getByLabel('Where').fill('Tesco');
   await pay.getByLabel('Amount').fill('40.00');
   await pay.getByLabel('Pocket').selectOption('GBP');
-  await page.getByRole('dialog').getByRole('button', { name: 'Pay' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Log expense' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Activity' }).first().click();
-  // 900 + 250 = 1150, then 1150 - 40 = 1110.
-  await expect(page.getByText('bal 1,150.00')).toBeVisible();
-  await expect(page.getByText('bal 1,110.00')).toBeVisible();
+  // 900 + 250 = 1150. The expense was paid elsewhere: it is on the statement for the
+  // budget, but the balance stays 1,150.
+  await expect(page.getByText('Tesco')).toBeVisible();
+  await expect(page.getByText('bal 1,150.00')).toHaveCount(2);
+  await expect(page.getByText('bal 1,110.00')).toHaveCount(0);
 });
 
 test('a new Alipay recipient is saved by the student and paid through Alipay only after approval', async ({ page }) => {
@@ -129,6 +142,9 @@ test('a new Alipay recipient is saved by the student and paid through Alipay onl
   await page.getByLabel(/They receive/).fill('5.00');
   await page.getByRole('button', { name: 'Get quote' }).click();
   await expect(page.getByText('Send 5.00 CNY to Li Na')).toBeVisible({ timeout: 15_000 });
+  // Real money leaving needs the password again; Approve stays disabled without it.
+  await expect(page.getByRole('button', { name: 'Approve' }).first()).toBeDisabled();
+  await page.getByLabel('Your password, to send real money').first().fill('testpass123');
   await page.getByRole('button', { name: 'Approve' }).first().click();
   await expect(page.getByText('Sent 5.00 CNY to Li Na.')).toBeVisible({ timeout: 20_000 });
 });

@@ -36,7 +36,7 @@ export async function fxHistory(base: Currency, quote: Currency, days = 30): Pro
     .map(([date, r]) => ({ date, rate: r[quote]! }))
     .filter((p) => Number.isFinite(p.rate))
     .sort((a, b) => a.date.localeCompare(b.date));
-  // ponytail: the ECB publishes ~30 currencies; PKR and some others are absent.
+  // the ECB publishes ~30 currencies; PKR and some others are absent.
   if (points.length < 2) throw new Error(`the ECB does not publish ${base}/${quote}`);
 
   const first = points[0]!;

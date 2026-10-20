@@ -14,7 +14,6 @@
     "start": "next start",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
-    "seed-demo": "node --env-file-if-exists=.env scripts/seed-demo.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run tests/unit",
@@ -23,10 +22,7 @@
     "test:e2e": "playwright test",
     "eval:stub": "tsx --env-file-if-exists=.env scripts/eval.ts --mode=stub",
     "eval:live": "tsx --env-file-if-exists=.env scripts/eval.ts --mode=live",
-    "evidence": "node --env-file-if-exists=.env scripts/evidence.mjs",
-    "package": "node scripts/package.mjs",
     "purge": "node --env-file-if-exists=.env scripts/purge.mjs",
-    "bundle": "node scripts/bundle.mjs",
     "vercel-build": "node scripts/migrate.mjs && next build",
     "alipay:key-for-env": "node scripts/alipay-key.mjs"
   },

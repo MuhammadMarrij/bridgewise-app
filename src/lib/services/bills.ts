@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { actionProposals, beneficiaries, obligations } from '../db/schema';
+import { actionProposals, beneficiaries, obligations, accounts } from '../db/schema';
 import {
   CURRENCY_REGISTRY,
   formatAmount,
@@ -21,6 +21,8 @@ import { canonicalize } from '../policy/terms';
 import { liveMidRate } from '../rates/live';
 import { AppError } from './errors';
 import { createObligation, resolveDeadline } from './intake';
+import { appendAudit } from './audit';
+import { alipayIdentity } from '../connectors/live';
 import { WALLET_FX_MARGIN_BPS, pocketsFor } from './wallet';
 import type { ResolvedSession } from './workspace';
 
@@ -118,9 +120,15 @@ export async function addBill(
     timezone?: string;
     reserve: string;
     reserveCurrency: Currency;
+    alipayAccount?: string;
+    alipayName?: string;
   },
 ) {
-  return createObligation(db, session, {
+  // A payee with an Alipay account is paid for real; Alipay checks the real name.
+  const alipayId = input.alipayAccount ? alipayIdentity(input.alipayAccount) : null;
+  if (alipayId && !input.alipayName?.trim()) throw new AppError('VALIDATION_FAILED', 'Alipay checks the real name on the account; enter it');
+  if (alipayId && input.currency !== 'CNY') throw new AppError('VALIDATION_FAILED', 'Alipay pays in CNY; enter the bill in CNY');
+  const made = await createObligation(db, session, {
     description: input.description,
     amount: input.amount,
     currency: input.currency,
@@ -131,6 +139,36 @@ export async function addBill(
     deadlineTimezone: input.timezone ?? 'UTC',
     reserveAmount: input.reserve,
     reserveCurrency: input.reserveCurrency,
+  });
+  if (alipayId) {
+    const ob = (await db.select().from(obligations).where(eq(obligations.id, made.obligationId)))[0]!;
+    await db.update(beneficiaries).set({ payoutIdentity: alipayId, payoutName: input.alipayName!.trim().slice(0, 60) })
+      .where(eq(beneficiaries.id, ob.beneficiaryId));
+  }
+  return made;
+}
+
+/**
+ * The student paid a set-aside bill through the payee's own channel. The
+ * reservation is released and the bill is recorded as paid; no BridgeWise money moves.
+ */
+export async function markBillPaid(db: Db, session: ResolvedSession, obligationId: string) {
+  return db.transaction(async (tx) => {
+    const bill = (await tx.select().from(obligations)
+      .where(and(eq(obligations.id, obligationId), eq(obligations.sessionId, session.id))).for('update'))[0];
+    if (!bill) throw new AppError('NOT_FOUND', 'no such bill');
+    if (bill.paidAt) throw new AppError('ALREADY_EXECUTED', 'this bill is already paid');
+    if (bill.setAsideMinor > 0n && bill.setAsideAccountId) {
+      const acct = (await tx.select().from(accounts).where(eq(accounts.id, bill.setAsideAccountId)).for('update'))[0]!;
+      await tx.update(accounts).set({ reservedMinor: acct.reservedMinor - bill.setAsideMinor, version: acct.version + 1 }).where(eq(accounts.id, acct.id));
+    }
+    const now = new Date();
+    await tx.update(obligations).set({ paidAt: now, setAsideMinor: 0n }).where(eq(obligations.id, bill.id));
+    await appendAudit(tx as unknown as Db, {
+      sessionId: session.id, correlationId: bill.id, type: 'bill.marked_paid', actor: 'user', outcome: 'allowed',
+      payload: { obligationId: bill.id, released: bill.setAsideMinor.toString() },
+    });
+    return { paid: true };
   });
 }
 
@@ -156,6 +194,9 @@ export interface BillPaymentTerms {
   readonly reserve: string;
   readonly dueAt: string;
   readonly quotedAt: string;
+  /** alipay: paid for real into the payee's Alipay. set_aside: reserved until the student pays it elsewhere. */
+  readonly rail: 'alipay' | 'set_aside';
+  readonly payeeAccount: string | null;
 }
 
 const hashOf = (t: object) => createHash('sha256').update(canonicalize(t)).digest('hex');
@@ -242,12 +283,16 @@ export async function proposeBillPayment(
     reserve: formatAmount(bill.reserveMinor, bill.reserveCurrency as Currency),
     dueAt: bill.deadlineAt.toISOString(),
     quotedAt: new Date().toISOString(),
+    rail: payee.payoutIdentity && billCurrency === 'CNY' ? 'alipay' : 'set_aside',
+    payeeAccount: payee.payoutIdentity,
   };
 
   const rows = await db.insert(actionProposals).values({
     sessionId: session.id,
     kind: 'pay_bill',
-    title: `Pay ${terms.billAmount} ${billCurrency} to ${payee.displayName}`,
+    title: terms.rail === 'alipay'
+      ? `Pay ${terms.billAmount} ${billCurrency} to ${payee.displayName} through Alipay`
+      : `Set aside ${terms.billAmount} ${billCurrency} for ${payee.displayName}`,
     summary:
       from === billCurrency
         ? `From your ${from} pocket. Reference ${payee.reference}.`

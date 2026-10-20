@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 // P0 has no domain logic yet. This asserts the one thing P0 actually promises:
-// the command contract from MASTER_PLAYBOOK 15.3 exists as real scripts.
+// the command contract exists as real scripts.
 const REQUIRED = [
-  'doctor', 'setup', 'dev', 'seed-demo', 'lint', 'typecheck',
+  'doctor', 'setup', 'dev', 'lint', 'typecheck',
   'test:unit', 'test:integration', 'test:security', 'test:e2e',
-  'eval:stub', 'eval:live', 'evidence', 'package',
+  'eval:stub', 'eval:live',
 ];
 
 describe('P0 command contract', () => {

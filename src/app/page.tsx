@@ -90,7 +90,9 @@ export default function App() {
     setThinking(true);
     try {
       const r = await api('/api/assistant', { method: 'POST', body: JSON.stringify({ message: text, history, lang: getLang() }) });
-      setChat((c) => [...c, { role: 'assistant', content: r.reply || '…', steps: r.steps, proposals: r.proposals, mode: r.mode }]);
+      setChat((c) => [...c, { role: 'assistant', content: (r.reply || '…') + (r.budgetNote ? `
+
+${r.budgetNote}` : ''), steps: r.steps, proposals: r.proposals, mode: r.mode }]);
       await refresh();
     } catch (e: any) {
       setChat((c) => [...c, { role: 'assistant', content: `Sorry — ${e.message}` }]);
@@ -99,10 +101,10 @@ export default function App() {
     }
   }, [chat, refresh]);
 
-  const approve = useCallback(async (p: Json) => {
+  const approve = useCallback(async (p: Json, password?: string) => {
     setApproving(p.id);
     try {
-      await api(`/api/proposals/${p.id}/approve`, { method: 'POST', body: JSON.stringify({ expectedTermsHash: p.termsHash }) });
+      await api(`/api/proposals/${p.id}/approve`, { method: 'POST', body: JSON.stringify({ expectedTermsHash: p.termsHash, password }) });
       setToast({ kind: 'ok', text: `${p.title} — done.` });
       await refresh();
     } catch (e: any) {

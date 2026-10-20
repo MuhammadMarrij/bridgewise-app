@@ -81,7 +81,7 @@ export async function comparePlan(
     comparison: ProviderComparison | null;
   } = { routes: staticRoutes, rate: null, comparison: null };
 
-  // ponytail: ROUTES_SOURCE=fixtures pins the frozen route table. The test suite
+  // ROUTES_SOURCE=fixtures pins the frozen route table. The test suite
   // uses it so consent and execution are tested against fixed terms without the
   // network; live-provider correctness has its own tests.
   if (process.env.ROUTES_SOURCE !== 'fixtures') try {

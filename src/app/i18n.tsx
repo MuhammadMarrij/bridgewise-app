@@ -3,7 +3,7 @@
 /**
  * English / 中文 switch.
  *
- * ponytail: translates rendered text nodes and placeholder/aria-label/title by
+ * translates rendered text nodes and placeholder/aria-label/title by
  * exact match against ZH, re-applied on every DOM change. Static UI text is
  * covered; sentences assembled from data (insights, guided replies) stay in
  * English. Upgrade path: t() at the call sites if those need translating too.

@@ -416,18 +416,22 @@ describe('wallet operations over HTTP', () => {
     expect(res.status).toBe(404);
   });
 
-  it('a replayed payment with the same key is charged once', async () => {
+  it('a replayed expense with the same key is logged once and never moves the balance', async () => {
     const mine = await newStudent();
     const body = JSON.stringify({ currency: 'GBP', amount: '10.00', merchant: 'Pret', category: 'food', idempotencyKey: 'replay-key-1' });
     await Promise.all([1, 2, 3].map(() => call('/api/spend', { method: 'POST', cookie: mine, body })));
     const w = await call('/api/wallet', { cookie: mine });
-    expect(w.body.wallet.pockets.find((p: any) => p.currency === 'GBP').balance).toBe('490.00');
+    expect(w.body.wallet.pockets.find((p: any) => p.currency === 'GBP').balance).toBe('500.00');
+    const t = await call('/api/transactions', { cookie: mine });
+    expect(t.body.transactions.filter((x: any) => x.description === 'Pret')).toHaveLength(1);
   });
 
-  it('refuses an overdraft, a negative amount, and an unknown category', async () => {
+  it('refuses a negative amount and an unknown category; a large expense paid elsewhere moves no money', async () => {
     const mine = await newStudent();
     const spend = (b: object) => call('/api/spend', { method: 'POST', cookie: mine, body: JSON.stringify({ currency: 'GBP', merchant: 'X', category: 'food', idempotencyKey: `k-${Math.random()}`, ...b }) });
-    expect((await spend({ amount: '9999.00' })).status).toBe(409);
+    expect((await spend({ amount: '9999.00' })).status).toBe(200);
+    const w = await call('/api/wallet', { cookie: mine });
+    expect(w.body.wallet.pockets.find((p: any) => p.currency === 'GBP').balance).toBe('500.00');
     expect((await spend({ amount: '-5.00' })).status).toBe(422);
     expect((await spend({ amount: '5.00', category: 'casino' })).status).toBe(422);
   });

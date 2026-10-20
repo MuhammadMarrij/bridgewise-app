@@ -13,8 +13,6 @@ const SignUp = z.object({
   name: safeText(40),
   homeCurrency: z.enum(SUPPORTED_CURRENCIES),
   studyCurrency: z.enum(SUPPORTED_CURRENCIES),
-  homeBalance: z.string().min(1).max(20),
-  studyBalance: z.string().min(1).max(20),
 }).strict();
 const SignIn = z.object({ email: z.string().min(3).max(120), password: z.string().min(1).max(200) }).strict();
 
