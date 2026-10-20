@@ -139,7 +139,8 @@ export async function createStripeTopUp(db: Db, session: ResolvedSession, amount
     {
       amount: Number(minor),
       currency: currency.toLowerCase(),
-      automatic_payment_methods: { enabled: true },
+      // No redirect-based methods: the card field confirms in place and we verify server-side.
+      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
       description: 'BridgeWise wallet top-up',
       metadata: { outTradeNo, sessionId: session.id },
     },

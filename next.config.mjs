@@ -2,15 +2,16 @@
 const isDev = process.env.NODE_ENV !== 'production';
 
 // A self-contained app: no third-party scripts, fonts, images or embeds. The
-// CSP is locked to same-origin assets. Next's dev runtime and React inline
+// CSP is locked to same-origin assets, plus Stripe's own hosts for its card field. Next's dev runtime and React inline
 // styles need the inline/eval allowances noted; production drops eval.
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+  `script-src 'self' 'unsafe-inline' https://js.stripe.com${isDev ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "img-src 'self' data: https://*.stripe.com",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://api.stripe.com",
+  "frame-src https://js.stripe.com https://hooks.stripe.com",
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'none'",

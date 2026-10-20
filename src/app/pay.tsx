@@ -6,7 +6,7 @@
  * In both cases the wallet is credited only after the server asks the provider.
  */
 import { useEffect, useRef, useState } from 'react';
-import { loadStripe, type Stripe, type StripeElements } from '@stripe/stripe-js';
+import { loadStripe, type Stripe, type StripeElements, type StripePaymentElement } from '@stripe/stripe-js';
 import { type Json } from './ui';
 import { api } from './views';
 
@@ -46,6 +46,9 @@ export function StripeCheckout({ publishableKey, currency, onDone, onError }: {
   const mount = useRef<HTMLDivElement | null>(null);
   const stripeRef = useRef<Stripe | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
+  const elRef = useRef<StripePaymentElement | null>(null);
+  // Mount once the box exists: it is rendered only after ready is set.
+  useEffect(() => { if (ready && mount.current && elRef.current) elRef.current.mount(mount.current); }, [ready]);
 
   async function start(e: React.FormEvent) {
     e.preventDefault(); setBusy(true);
@@ -53,11 +56,10 @@ export function StripeCheckout({ publishableKey, currency, onDone, onError }: {
       const r = await api('/api/pay/stripe', { method: 'POST', body: JSON.stringify({ amount, currency }) });
       const stripe = await loadStripe(publishableKey);
       if (!stripe) throw new Error('Stripe could not load');
-      const elements = stripe.elements({ clientSecret: r.clientSecret, appearance: { theme: 'stripe' } });
-      const el = elements.create('payment');
+      const elements = stripe.elements({ clientSecret: r.clientSecret, appearance: { theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'stripe' } });
+      elRef.current = elements.create('payment');
       stripeRef.current = stripe; elementsRef.current = elements;
       setReady({ trade: r.outTradeNo });
-      setTimeout(() => mount.current && el.mount(mount.current), 0);
     } catch (x: any) { onError(x.message); } finally { setBusy(false); }
   }
 
