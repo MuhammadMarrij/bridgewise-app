@@ -1,13 +1,15 @@
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getDb } from '@/lib/db/client';
-import { assertSameOrigin, fail, json, parseBody, requireSession } from '@/lib/api/http';
+import { assertSameOrigin, fail, json, parseBody, requireSession, assertLegacyDemoEnabled } from '@/lib/api/http';
 import { topUpFromSource } from '@/lib/services/linked';
 
 const Body = z.object({ amount: z.string().min(1).max(20), idempotencyKey: z.string().min(8).max(80) }).strict();
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
+    // A top-up with no provider behind it: tests and local runs only, never the hosted site.
+    assertLegacyDemoEnabled();
     assertSameOrigin(req);
     const session = await requireSession(req);
     const { id } = await ctx.params;

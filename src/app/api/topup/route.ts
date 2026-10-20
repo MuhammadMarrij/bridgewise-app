@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getDb } from '@/lib/db/client';
-import { assertSameOrigin, fail, json, parseBody, requireSession } from '@/lib/api/http';
+import { assertSameOrigin, fail, json, parseBody, requireSession, assertLegacyDemoEnabled } from '@/lib/api/http';
 import { SUPPORTED_CURRENCIES, type Currency } from '@/lib/domain/money';
 import { topUp } from '@/lib/services/money-ops';
 import { safeText } from '@/lib/security/sanitize';
@@ -15,6 +15,8 @@ const Body = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    // A top-up with no provider behind it: tests and local runs only, never the hosted site.
+    assertLegacyDemoEnabled();
     assertSameOrigin(req);
     const session = await requireSession(req);
     const b = await parseBody(req, Body);

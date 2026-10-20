@@ -21,7 +21,7 @@ export interface Ctx {
   decline: (p: Json) => void;
   approving: string | null;
   go: (tab: string) => void;
-  sheet: (which: 'add' | 'pay') => void;
+  sheet: (which: 'add' | 'pay', how?: 'alipay' | 'stripe') => void;
 }
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });

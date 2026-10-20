@@ -50,7 +50,8 @@ export default function App() {
   const [panel, setPanel] = useState(false);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [name, setName] = useState('there');
-  const [sheet, setSheet] = useState<'add' | 'pay' | null>(null);
+  const [sheet, setSheetState] = useState<{ which: 'add' | 'pay'; how?: 'alipay' | 'stripe' } | null>(null);
+  const setSheet = useCallback((which: 'add' | 'pay' | null, how?: 'alipay' | 'stripe') => setSheetState(which ? { which, how } : null), []);
 
   const refresh = useCallback(async () => {
     try {
@@ -179,8 +180,8 @@ export default function App() {
 
       <button className="btn fab" onClick={() => setPanel(true)}><Icon name="spark" /> Assistant</button>
 
-      {sheet === 'add' && <AddMoney ctx={ctx} onClose={() => setSheet(null)} />}
-      {sheet === 'pay' && <RecordPayment ctx={ctx} onClose={() => setSheet(null)} />}
+      {sheet?.which === 'add' && <AddMoney ctx={ctx} how={sheet.how} onClose={() => setSheet(null)} />}
+      {sheet?.which === 'pay' && <RecordPayment ctx={ctx} onClose={() => setSheet(null)} />}
 
       <nav className="tabbar" aria-label="Main">
         {TABS.filter((t) => t.mobile).map((t) => (

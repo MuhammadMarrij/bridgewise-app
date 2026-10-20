@@ -79,7 +79,7 @@ export function StripeCheckout({ publishableKey, currency, onDone, onError }: {
     <div className="stack">
       <div ref={mount} />
       <button className="btn" onClick={pay} disabled={busy} style={{ justifyContent: 'center' }}>{busy ? 'Processing…' : `Pay ${amount} ${currency}`}</button>
-      <p className="hint">The card field is Stripe&rsquo;s own. Test card 4242 4242 4242 4242, any future date, any CVC.</p>
+      <p className="hint">The card field is Stripe&rsquo;s own; your card number never reaches BridgeWise.</p>
     </div>
   ) : (
     <form className="stack" onSubmit={start}>

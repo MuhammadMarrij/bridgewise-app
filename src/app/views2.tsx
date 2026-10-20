@@ -29,56 +29,26 @@ export function TxRow({ t }: { t: Json }) {
 
 /* ------------------------------------------------------- add money / record pay */
 
-export function AddMoney({ ctx, onClose, currency }: { ctx: Ctx; onClose: () => void; currency?: string }) {
-  const { home } = ctx.data.profile;
-  const [f, setF] = useState({ currency: currency ?? home, amount: '', source: 'Transfer from home bank' });
-  const [sources, setSources] = useState<Json[]>([]);
-  const [via, setVia] = useState('');
-  useEffect(() => { api('/api/linked').then((r) => { setSources(r.sources); if (r.sources[0]) setVia(r.sources[0].id); }).catch(() => {}); }, []);
-  const viaSrc = sources.find((s) => s.id === via);
+export function AddMoney({ ctx, onClose, how: initial }: { ctx: Ctx; onClose: () => void; how?: 'alipay' | 'stripe' }) {
   const providers = useProviders();
-  const [how, setHow] = useState<'linked' | 'alipay' | 'stripe'>('linked');
-  const [busy, setBusy] = useState(false);
+  const [how, setHow] = useState<'alipay' | 'stripe' | null>(initial ?? null);
   const [err, setErr] = useState<string | null>(null);
-  const [k] = useState(key);
-  async function go(e: React.FormEvent) {
-    e.preventDefault(); setBusy(true); setErr(null);
-    try {
-      if (viaSrc) await api(`/api/linked/${viaSrc.id}/topup`, { method: 'POST', body: JSON.stringify({ amount: f.amount, idempotencyKey: k }) });
-      else await api('/api/topup', { method: 'POST', body: JSON.stringify({ ...f, idempotencyKey: k }) });
-      await ctx.refresh(); onClose();
-    }
-    catch (x: any) { setErr(x.message); } finally { setBusy(false); }
-  }
+  const pick = how ?? (providers?.alipay ? 'alipay' : providers?.stripe ? 'stripe' : null);
   return (
     <Sheet title="Add money" onClose={onClose}>
-      {(providers?.alipay || providers?.stripe) && (
+      {providers && !providers.alipay && !providers.stripe && <p className="muted">No payment method is set up on this server yet.</p>}
+      {providers?.alipay && providers?.stripe && (
         <div className="seg" role="group" aria-label="How" style={{ marginBottom: '1rem' }}>
-          <button aria-pressed={how === 'linked'} onClick={() => setHow('linked')}>Linked account</button>
-          {providers?.alipay && <button aria-pressed={how === 'alipay'} onClick={() => setHow('alipay')}>Alipay{providers.alipaySandbox ? ' (sandbox)' : ''}</button>}
-          {providers?.stripe && <button aria-pressed={how === 'stripe'} onClick={() => setHow('stripe')}>Card · Stripe{providers.stripeTestMode ? ' (test)' : ''}</button>}
+          <button aria-pressed={pick === 'alipay'} onClick={() => setHow('alipay')}>Alipay 支付宝</button>
+          <button aria-pressed={pick === 'stripe'} onClick={() => setHow('stripe')}>Bank card</button>
         </div>
       )}
-      {how === 'alipay' && <AlipayCheckout onError={setErr} />}
-      {how === 'stripe' && providers?.stripePublishableKey && (
+      {pick === 'alipay' && providers?.alipay && <AlipayCheckout onError={setErr} />}
+      {pick === 'stripe' && providers?.stripePublishableKey && (
         <StripeCheckout publishableKey={providers.stripePublishableKey} currency={ctx.data.profile.study}
           onDone={async () => { await ctx.refresh(); onClose(); }} onError={setErr} />
       )}
-      {how !== 'linked' && err && <div className="notice error" role="alert" style={{ marginTop: '.75rem' }}>{err}</div>}
-      {how === 'linked' && <form className="stack" onSubmit={go}>
-        <div><label htmlFor="am-v">From</label>
-          <select id="am-v" value={via} onChange={(e) => setVia(e.target.value)}>
-            {sources.map((s) => <option key={s.id} value={s.id}>{s.label} ({s.currency})</option>)}
-            <option value="">Test funds (no linked account)</option>
-          </select>
-          {sources.length === 0 && <p className="hint">Link a card, Alipay, WeChat Pay or bank in Cards &amp; accounts to add money from it.</p>}</div>
-        <div><label htmlFor="am-a">Amount</label>
-          <div className="pair"><input id="am-a" inputMode="decimal" autoFocus value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="10000.00" required />
-            {viaSrc ? <span className="tag" style={{ alignSelf: 'center' }}>{viaSrc.currency}</span>
-              : <select aria-label="Currency" value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value })}>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}</select>}</div></div>
-        {err && <div className="notice error" role="alert">{err}</div>}
-        <button className="btn" disabled={busy} style={{ justifyContent: 'center' }}>{busy ? 'Adding…' : 'Add money'}</button>
-      </form>}
+      {err && <div className="notice error" role="alert" style={{ marginTop: '.75rem' }}>{err}</div>}
     </Sheet>
   );
 }

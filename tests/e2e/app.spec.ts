@@ -89,12 +89,19 @@ test('every control on Home has an accessible name', async ({ page }) => {
 test('add money, pay for something, and see both on the statement with running balances', async ({ page }) => {
   await open(page);
   await page.getByRole('button', { name: 'Wallet' }).first().click();
+  // Add money offers only real rails: Alipay's cashier and a card through Stripe.
   await page.getByRole('button', { name: 'Add money' }).first().click();
   const add = page.getByRole('dialog');
-  await add.getByLabel('Amount').fill('250.00');
-  await add.getByLabel('Currency').selectOption('GBP');
-  await page.getByRole('dialog').getByRole('button', { name: 'Add money' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(add.getByRole('button', { name: 'Alipay 支付宝', exact: true })).toBeVisible();
+  await expect(add.getByRole('button', { name: 'Bank card' })).toBeVisible();
+  await expect(add.getByText(/test funds/i)).toHaveCount(0);
+  await add.getByRole('button', { name: 'Close' }).click();
+  // Paying on Alipay's own cashier can't be scripted, so fund the pocket through
+  // the local-only top-up endpoint (it returns 404 on the hosted site).
+  const origin = new URL(page.url()).origin;
+  const r = await page.request.post('/api/topup', { headers: { origin }, data: { currency: 'GBP', amount: '250.00', source: 'Transfer from home bank', idempotencyKey: 'e2e-' + Date.now() } });
+  expect(r.ok()).toBe(true);
+  await page.reload();
 
   await page.getByRole('button', { name: 'Pay' }).first().click();
   const pay = page.getByRole('dialog');

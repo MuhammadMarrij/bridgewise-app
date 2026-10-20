@@ -28,6 +28,9 @@ const SKIN: Record<string, { bg: string; name: string }> = {
 };
 
 function SourceTile({ s, onTopUp, onOut, onRemove }: { s: Json; onTopUp: () => void; onOut: () => void; onRemove: () => void }) {
+  // Cards top up through Stripe, Alipay through Alipay. WeChat Pay and banks have no rail open to us yet.
+  const canIn = s.kind === 'card' || s.provider === 'alipay';
+  const canOut = s.provider === 'alipay';
   const skin = SKIN[s.provider] ?? { bg: 'linear-gradient(135deg,#334,#556)', name: s.provider };
   return (
     <div className="source">
@@ -37,8 +40,9 @@ function SourceTile({ s, onTopUp, onOut, onRemove }: { s: Json; onTopUp: () => v
         <div className="row between small"><span>{s.holder ?? ''}</span><span>{s.expiry ?? s.currency}</span></div>
       </div>
       <div className="actions" style={{ marginTop: '.6rem' }}>
-        <button className="btn small" onClick={onTopUp}><Icon name="down" size={14} /> Add money</button>
-        {s.kind !== 'card' && <button className="btn secondary small" onClick={onOut}><Icon name="up" size={14} /> Move out</button>}
+        {canIn && <button className="btn small" onClick={onTopUp}><Icon name="down" size={14} /> Add money</button>}
+        {canOut && <button className="btn secondary small" onClick={onOut}><Icon name="up" size={14} /> Move out</button>}
+        {!canIn && <span className="tag">Payments coming soon</span>}
         <button className="btn danger small" onClick={onRemove} aria-label={`Remove ${s.label}`}>Remove</button>
       </div>
     </div>
@@ -97,13 +101,7 @@ export function Accounts(ctx: Ctx) {
 
   return (
     <>
-      {data?.mode === 'sandbox' && (
-        <div className="notice info small">
-          <strong>Sandbox connectors.</strong> Cards are validated exactly as an acquirer would (network, Luhn, expiry, security code) and tokenised — the full number is never stored.
-          Live Alipay, WeChat Pay and bank connections plug into the same connector once merchant credentials are issued.
-          Test cards: <code>4242 4242 4242 4242</code> works, <code>4000 0000 0000 0002</code> declines.
-        </div>
-      )}
+
       {msg && <div className={`notice ${msg.kind}`} role={msg.kind === 'error' ? 'alert' : 'status'}>{msg.text}</div>}
 
       <section className="card">
@@ -112,7 +110,7 @@ export function Accounts(ctx: Ctx) {
         <div className="sources">
           {sources.map((s) => (
             <SourceTile key={s.id} s={s}
-              onTopUp={() => setAction({ id: s.id, mode: 'in', amount: '' })}
+              onTopUp={() => ctx.sheet('add', s.kind === 'card' ? 'stripe' : 'alipay')}
               onOut={() => setAction({ id: s.id, mode: 'out', amount: '' })}
               onRemove={() => remove(s.id)} />
           ))}
