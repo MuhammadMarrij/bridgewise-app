@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   try {
     // No session required, so the limit is the only thing between this and a
     // free proxy to the upstream comparison endpoint.
-    rateLimit(`quote:${clientKey(req)}`, 30, 60_000);
+    await rateLimit(`quote:${clientKey(req)}`, 30, 60_000);
     const body = await parseBody(req, Body);
 
     const target = parseAmount(body.targetAmount, body.targetCurrency);

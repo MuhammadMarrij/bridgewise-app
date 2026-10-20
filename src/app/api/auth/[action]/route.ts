@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ action: st
     const { action } = await ctx.params;
     const db = getDb();
     if (action === 'signup') {
-      rateLimit(`signup:${clientKey(req)}`, 10, 60_000);
+      await rateLimit(`signup:${clientKey(req)}`, 10, 60_000);
       const b = await parseBody(req, SignUp);
       const out = await signUp(db, { ...b, homeCurrency: b.homeCurrency as Currency, studyCurrency: b.studyCurrency as Currency });
       return withCookie(json({ ok: true, name: b.name }, { status: 201 }), out.token);
@@ -41,8 +41,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ action: st
     if (action === 'signin') {
       const b = await parseBody(req, SignIn);
       // Slow down guessing per address and per client.
-      rateLimit(`signin:${b.email.toLowerCase()}`, 5, 60_000);
-      rateLimit(`signin-ip:${clientKey(req)}`, 20, 60_000);
+      await rateLimit(`signin:${b.email.toLowerCase()}`, 5, 60_000);
+      await rateLimit(`signin-ip:${clientKey(req)}`, 20, 60_000);
       const out = await signIn(db, b.email, b.password);
       return withCookie(json({ ok: true, name: out.name }), out.token);
     }

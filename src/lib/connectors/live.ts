@@ -164,3 +164,52 @@ export async function confirmStripe(db: Db, session: ResolvedSession, outTradeNo
   const out = await settle(db, session, 'stripe', outTradeNo, pi.id, BigInt(pi.amount_received));
   return { ...out, credited: true };
 }
+
+/* ---------------------------------------------------------- Alipay payout */
+
+/** Alipay mobile number or email: the identities its transfer API accepts. */
+export function alipayIdentity(raw: string): string {
+  const v = raw.trim();
+  const phone = v.replace(/[\s-]/g, '').replace(/^\+?86/, '');
+  if (/^1[3-9]\d{9}$/.test(phone)) return phone;
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return v.toLowerCase();
+  throw new AppError('VALIDATION_FAILED', 'enter the mobile number or email of the Alipay account');
+}
+
+/**
+ * Pays CNY into an Alipay account from the merchant balance, through
+ * alipay.fund.trans.uni.transfer. outBizNo is the idempotency key: Alipay will
+ * not pay the same one twice, so a retried approval is safe.
+ */
+export async function alipayTransfer(input: { outBizNo: string; amount: string; identity: string; name: string; title: string }) {
+  const call = () => alipay().exec('alipay.fund.trans.uni.transfer', {
+    bizContent: {
+      out_biz_no: input.outBizNo,
+      trans_amount: input.amount,
+      product_code: 'TRANS_ACCOUNT_NO_PWD',
+      biz_scene: 'DIRECT_TRANSFER',
+      order_title: input.title.slice(0, 60),
+      payee_info: { identity: input.identity, identity_type: 'ALIPAY_LOGON_ID', name: input.name },
+    },
+  });
+  // The sandbox gateway sometimes answers with an HTTP error page. Retrying is
+  // safe: the same out_biz_no is never paid twice.
+  let r: Awaited<ReturnType<typeof call>> | undefined;
+  for (let attempt = 0; attempt < 3 && !r; attempt++) {
+    try { r = await call(); } catch (e) {
+      if (attempt === 2) throw new AppError('DEPENDENCY_UNAVAILABLE', 'Alipay did not respond. Nothing was sent; try again in a moment.');
+      await new Promise((ok) => setTimeout(ok, 600 * (attempt + 1)));
+    }
+  }
+  if (r!.code !== '10000') {
+    const sub = String(r!.subCode ?? '');
+    if (/PAYEE|PAYCARD|RECEIVE/.test(sub)) {
+      throw new AppError('VALIDATION_FAILED', `Alipay refused the payee: ${r!.subMsg ?? sub}. Check the account and the real name.`);
+    }
+    throw new AppError('DEPENDENCY_UNAVAILABLE', `Alipay did not complete the transfer: ${r!.subMsg ?? r!.msg ?? sub}`);
+  }
+  if (r!.status !== 'SUCCESS') {
+    throw new AppError('DEPENDENCY_UNAVAILABLE', 'Alipay is still processing this transfer; approve again in a minute');
+  }
+  return { orderId: String(r!.orderId), fundOrderId: r!.payFundOrderId ? String(r!.payFundOrderId) : null };
+}

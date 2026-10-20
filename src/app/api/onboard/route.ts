@@ -20,7 +20,7 @@ const Body = z
 export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
-    rateLimit(`onboard:${clientKey(req)}`, Number(process.env.SESSION_RATE_LIMIT_PER_MINUTE ?? 20), 60_000);
+    await rateLimit(`onboard:${clientKey(req)}`, Number(process.env.SESSION_RATE_LIMIT_PER_MINUTE ?? 20), 60_000);
     const body = await parseBody(req, Body);
     const opened = await openStudentAccount(getDb(), body as never);
     const res = json({ ok: true }, { status: 201 });

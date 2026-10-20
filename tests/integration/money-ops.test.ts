@@ -33,6 +33,9 @@ async function booksBalance(sessionId: string) {
 beforeEach(async () => { await truncateAll(pool); });
 afterAll(async () => { await pool.end(); });
 
+const SANDBOX_PAYEE = { account: process.env.ALIPAY_SANDBOX_PAYEE ?? 'pybnum6156@sandbox.com', name: process.env.ALIPAY_SANDBOX_PAYEE_NAME ?? 'pybnum6156' };
+const alipayReady = () => !!(process.env.ALIPAY_APP_ID && process.env.ALIPAY_PUBLIC_KEY);
+
 describe('a real wallet statement', () => {
   it('opening balances appear on the statement and in the ledger', async () => {
     const s = await student();
@@ -67,20 +70,32 @@ describe('a real wallet statement', () => {
 });
 
 describe('sending money to a person', () => {
-  it('sends home in another currency only after approval, and re-checks the payee', async () => {
-    if (!(await online())) return console.warn('skipped: offline');
+  it('pays an Alipay recipient for real through Alipay, only after approval, and never twice', async () => {
+    if (!(await online()) || !alipayReady()) return console.warn('skipped: offline or Alipay not configured');
     const s = await student();
-    const mum = await addRecipient(db, s, { name: 'Mum', relationship: 'family', country: 'CN', currency: 'CNY', accountLabel: 'Alipay ••4471' });
-    // GBP -> CNY: the recipient gets exactly 2,000.00 CNY.
-    const p = await proposeSend(db, s, { recipientId: mum.id, receiveAmount: '2000.00', fromCurrency: 'GBP', proposedBy: 'agent' });
+    const friend = await addRecipient(db, s, { name: 'Li Na', relationship: 'friend', country: 'CN', currency: 'CNY', alipayAccount: SANDBOX_PAYEE.account, alipayName: SANDBOX_PAYEE.name });
+    expect(friend).toMatchObject({ rail: 'alipay', currency: 'CNY' });
+    // GBP -> CNY: the recipient gets exactly 20.00 CNY in their Alipay.
+    const p = await proposeSend(db, s, { recipientId: friend.id, receiveAmount: '20.00', fromCurrency: 'GBP', proposedBy: 'agent' });
     let gbp = (await db.select().from(accounts).where(eq(accounts.sessionId, s.id))).find((a) => a.currency === 'GBP')!;
     expect(gbp.balanceMinor).toBe(100000n); // nothing moved yet
-    await executeProposal(db, s, p.id, p.termsHash);
+    const done = await executeProposal(db, s, p.id, p.termsHash);
+    expect(done.proposal.resultJson).toMatchObject({ status: 'PAID' });
     gbp = (await db.select().from(accounts).where(eq(accounts.sessionId, s.id))).find((a) => a.currency === 'GBP')!;
     expect(gbp.balanceMinor).toBeLessThan(100000n);
     const sent = (await listTransactions(db, s.id))[0]!;
-    expect(sent).toMatchObject({ kind: 'send', category: 'family', counterparty: 'Mum' });
+    expect(sent).toMatchObject({ kind: 'send', description: 'To Li Na · Alipay', counterparty: 'Li Na' });
+    expect(sent.reference).toMatch(/^\d{10,}$/); // Alipay's order id
+    const again = await executeProposal(db, s, p.id, p.termsHash);
+    expect(again.replay).toBe(true);
+    expect((await listTransactions(db, s.id)).filter((t) => t.kind === 'send')).toHaveLength(1);
     await booksBalance(s.id);
+  });
+
+  it('refuses, before anything moves, a recipient no real rail can pay yet', async () => {
+    const s = await student();
+    const mum = await addRecipient(db, s, { name: 'Ammi', relationship: 'family', country: 'PK', currency: 'PKR', accountLabel: 'Meezan Bank ••2201' });
+    await expect(proposeSend(db, s, { recipientId: mum.id, receiveAmount: '10000', proposedBy: 'user' })).rejects.toThrow(/isn't available yet/);
   });
 
   it('another student cannot send to my recipient', async () => {

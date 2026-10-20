@@ -13,7 +13,10 @@ const Body = z.object({
   relationship: z.enum(['family', 'friend', 'landlord', 'university', 'other']),
   country: z.string().length(2),
   currency: z.enum(SUPPORTED_CURRENCIES),
-  accountLabel: safeText(60, 3),
+  accountLabel: safeText(60, 3).optional(),
+  // Paid for real through Alipay: the account (mobile or email) and the real name Alipay checks.
+  alipayAccount: z.string().trim().min(5).max(80).optional(),
+  alipayName: safeText(60).optional(),
 }).strict();
 
 export async function GET(req: NextRequest) {

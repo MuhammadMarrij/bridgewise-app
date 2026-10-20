@@ -26,6 +26,7 @@ export interface StatementRow {
   counterparty?: string | null;
   proposalId?: string | null;
   idempotencyKey?: string | null;
+  reference?: string | null;
 }
 
 export async function postStatement(tx: Db, row: StatementRow): Promise<void> {
@@ -36,5 +37,6 @@ export async function postStatement(tx: Db, row: StatementRow): Promise<void> {
     proposalId: row.proposalId ?? null,
     idempotencyKey: row.idempotencyKey ?? null,
     linkedSourceId: row.linkedSourceId ?? null,
+    reference: row.reference?.slice(0, 80) ?? null,
   });
 }

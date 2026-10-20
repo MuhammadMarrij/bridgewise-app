@@ -5,8 +5,7 @@ import {
   demoControlsEnabled,
   fail,
   json,
-  requireSession,
-} from '@/lib/api/http';
+  requireSession, assertLegacyDemoEnabled } from '@/lib/api/http';
 import { AppError } from '@/lib/services/errors';
 import { releaseRemittance } from '@/lib/services/remittance';
 import { inboundRemittances } from '@/lib/db/schema';
@@ -20,6 +19,7 @@ import { and, eq } from 'drizzle-orm';
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
+    assertLegacyDemoEnabled();
     if (!demoControlsEnabled()) {
       throw new AppError('UNSUPPORTED', 'scenario controls are disabled in this environment');
     }

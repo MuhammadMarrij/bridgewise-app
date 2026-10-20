@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
     const session = await requireSession(req);
-    rateLimit(`stripe:${session.id}`, 10, 60_000);
+    await rateLimit(`stripe:${session.id}`, 10, 60_000);
     const b = await parseBody(req, Body);
     return json(await createStripeTopUp(getDb(), session, b.amount, b.currency as Currency), { status: 201 });
   } catch (error) {

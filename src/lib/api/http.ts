@@ -5,7 +5,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { getDb } from '../db/client';
+import { getDb, getPool } from '../db/client';
 import { AppError, isAppError } from '../services/errors';
 import { MoneyError } from '../domain/money';
 import { SESSION_COOKIE, resolveSession, type ResolvedSession } from '../services/workspace';
@@ -105,20 +105,22 @@ export function json(data: unknown, init?: ResponseInit): NextResponse {
 export const uuid = z.string().uuid();
 
 /**
- * A crude in-process limiter. Enough to stop a public demo being used as a free
- * model endpoint; it is not a distributed rate limiter and the report says so.
+ * Fixed-window limiter backed by Postgres, so every server instance shares one
+ * count. One upsert per call.
+ * ponytail: fixed window allows up to 2x the limit across a window edge; a
+ * sliding window or a token bucket in Redis if that ever matters.
  */
-const hits = new Map<string, { count: number; resetAt: number }>();
-
-export function rateLimit(key: string, limit: number, windowMs: number): void {
-  const now = Date.now();
-  const entry = hits.get(key);
-  if (!entry || entry.resetAt <= now) {
-    hits.set(key, { count: 1, resetAt: now + windowMs });
-    return;
-  }
-  entry.count += 1;
-  if (entry.count > limit) throw new AppError('RATE_LIMITED', 'too many requests');
+export async function rateLimit(key: string, limit: number, windowMs: number): Promise<void> {
+  const windowStart = Math.floor(Date.now() / windowMs) * windowMs;
+  const { rows } = await getPool().query<{ count: number }>(
+    `INSERT INTO rate_limits (key, window_start, count) VALUES ($1, $2, 1)
+     ON CONFLICT (key, window_start) DO UPDATE SET count = rate_limits.count + 1
+     RETURNING count`,
+    [key, windowStart],
+  );
+  // Old windows are dead weight; sweep now and then rather than on every call.
+  if (Math.random() < 0.01) await getPool().query('DELETE FROM rate_limits WHERE window_start < $1', [Date.now() - 86_400_000]);
+  if (rows[0]!.count > limit) throw new AppError('RATE_LIMITED', 'too many requests');
 }
 
 export function clientKey(req: NextRequest): string {
@@ -128,4 +130,13 @@ export function clientKey(req: NextRequest): string {
 /** True only for a local demo deployment. Guards the scenario-control routes. */
 export function demoControlsEnabled(): boolean {
   return (process.env.APP_ENV ?? 'local_demo') !== 'hosted_demo';
+}
+
+/**
+ * The pre-wallet demo endpoints (anonymous scenario sessions and the transfer
+ * simulator) exist for the test suite and local runs. On the hosted site an
+ * anonymous session would be an account nobody signed up for, so they are absent.
+ */
+export function assertLegacyDemoEnabled(): void {
+  if (!demoControlsEnabled()) throw new AppError('NOT_FOUND', 'not found');
 }

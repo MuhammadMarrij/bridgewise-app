@@ -1,151 +1,77 @@
-# BridgeWise — security self-assessment
+# BridgeWise: security and compliance self-assessment
 
-**Release:** see `evidence/run-manifest.json` for the exact commit
-**Environment assessed:** local demo, Node 24.16.0, PostgreSQL 17, `EXECUTION_MODE=SIMULATED`
-**Assessed by:** the implementing session. **This is a self-assessment, not an external audit,
-and no part of it should be read as certification.**
+Version of 20 Oct 2026, for the release on `master` deployed at https://bridgewise-azure.vercel.app.
+Every control below names the code that implements it and the test that attacks it. Claims without
+a test are marked as such.
 
-Control status vocabulary, used strictly:
-`IMPLEMENTED_AND_TESTED` · `IMPLEMENTED_NOT_TESTED` · `NOT_IMPLEMENTED` · `NOT_APPLICABLE_WITH_REASON`
+## 1. What is at stake
 
----
-
-## 1. Scope and data inventory
-
-| Data | Nature | Where it lives |
+| Asset | Where it lives | Exposure if lost |
 |---|---|---|
-| Synthetic balances, obligations, transfers | Invented | PostgreSQL, scoped by session |
-| Session token | Secret, high entropy | Browser cookie; only its **hash** is stored |
-| Approval nonce | Secret, one use | Browser memory for one request; only its **hash** is stored |
-| Audit and evidence | Redacted structured records | PostgreSQL, exportable per session |
-| Model API key | Secret | Server environment only; absent from any client bundle |
+| Student balances and statement | PostgreSQL (Neon, Singapore), double-entry ledger | Test funds only today; the ledger's integrity is what a bank would audit |
+| Passwords | `users.password_hash`: scrypt N=16384, r=8, p=1, per-user salt | Never stored or logged in clear |
+| Session tokens | HttpOnly cookie `bw_session`; the server stores only a hash of the token | 30-day lifetime, rotated on sign-in and sign-out |
+| Linked cards | Network, last four and an opaque token only | The full card number and security code are never stored |
+| Provider keys (Alipay, Stripe, Anthropic, database) | Vercel environment variables; local `.env` and `secrets/` (gitignored) | Sandbox or test-mode keys, except the database and Anthropic keys |
 
-**No real personal data exists in this system.** No identity document, bank credential, card
-number or real account is collected, and there is nowhere to put one. The team's registration
-workbook, passports and organizer correspondence are deliberately outside the repository and
-excluded by `.gitignore`.
+## 2. Threats and the control for each
 
----
-
-## 2. Threat model
-
-**In scope:** a hostile user of their own workspace, a hostile document or provider label fed to
-the assistant, a hostile site in the user's browser, a user racing themselves across tabs, a
-network that drops responses, and a judge poking at the API directly.
-
-**Out of scope, and why:** a malicious database administrator (they can alter audit rows; §9 says
-so), a compromised host, a supply-chain attack on a pinned dependency, and physical access. These
-are real but unaddressed, and are not claimed otherwise.
-
----
-
-## 3. Permission tiers
-
-| Tier | Capability | Authority required | Status |
-|---|---|---|---|
-| P0 | Public education content | None | `IMPLEMENTED_AND_TESTED` |
-| P1 | Read own balances, compare, calculate | Active session | `IMPLEMENTED_AND_TESTED` |
-| P2 | Save a goal or an immutable proposal | Active session plus validation; no funds move | `IMPLEMENTED_AND_TESTED` |
-| P3 | Execute the exact approved payment | Separate user confirmation, one-use nonce, server revalidation | `IMPLEMENTED_AND_TESTED` |
-| P4 | Real money, identity documents, credit applications | Not implemented; denied | `NOT_IMPLEMENTED` by design |
-
-The model operates at P1 and P2 only. **It has no P3 capability, because no P3 tool exists.**
-The interface may display a tier; the server enforces it.
-
----
-
-## 4. Controls
-
-| # | Control | Enforced at | Status | Evidence |
+| # | Threat | Control | Code | Test |
 |---|---|---|---|---|
-| C1 | Session resolved server-side from an HttpOnly, SameSite=Strict cookie; only its hash stored | `services/workspace.ts` | `IMPLEMENTED_AND_TESTED` | `api.test.ts` |
-| C2 | Every object query scoped by session; not-owned is indistinguishable from absent | service layer | `IMPLEMENTED_AND_TESTED` | `execution.test.ts`, `api.test.ts` |
-| C3 | Origin checked on every mutation, including a missing Origin header | `api/http.ts` | `IMPLEMENTED_AND_TESTED` | `api.test.ts` |
-| C4 | Canonical terms hashed with SHA-256; versions of obligation and beneficiary included | `policy/terms.ts` | `IMPLEMENTED_AND_TESTED` | `execution.test.ts` |
-| C5 | One-use approval nonce, hash stored, constant-time comparison, one approval per plan | `services/execution.ts` | `IMPLEMENTED_AND_TESTED` | `execution.test.ts` |
-| C6 | Approval expiry capped at the earlier of quote expiry and five minutes | `services/execution.ts` | `IMPLEMENTED_AND_TESTED` | `execution.test.ts` |
-| C7 | Atomic execution: approval consumption, transfer, journal, balance, outbox, audit in one transaction | `services/execution.ts` | `IMPLEMENTED_AND_TESTED` | `execution.test.ts` |
-| C8 | Consistent lock order: obligation, account, plan | `services/execution.ts` | `IMPLEMENTED_AND_TESTED` | concurrency tests |
-| C9 | Idempotency on `(session, key)` and uniqueness on `plan_id` | schema + service | `IMPLEMENTED_AND_TESTED` | 20-concurrent test |
-| C10 | Obligation claim prevents two plans paying one tuition | `services/exposure.ts` | `IMPLEMENTED_AND_TESTED` | `overpay.test.ts` |
-| C11 | Database CHECK constraints for balances, reservations, fee arithmetic, known vocabularies | `drizzle/0001_invariants.sql` | `IMPLEMENTED_AND_TESTED` | migration applied; suite depends on it |
-| C12 | Model has no approve, execute, SQL, filesystem, shell or URL tool | `agent/tools.ts` | `IMPLEMENTED_AND_TESTED` | compromised-model test |
-| C13 | Strict tool schemas generated from the validating Zod objects | `agent/schema.ts` | `IMPLEMENTED_AND_TESTED` | `agent.test.ts` |
-| C14 | Server-enforced step, time, input and output bounds on agent runs | `agent/runner.ts` | `IMPLEMENTED_AND_TESTED` | `agent.test.ts` |
-| C15 | Typed, safe errors; no database text, stack traces or secrets in responses | `services/errors.ts` | `IMPLEMENTED_AND_TESTED` | `api.test.ts` |
-| C16 | Audit and evidence redaction of token, nonce, secret, key, cookie fields | `services/audit.ts` | `IMPLEMENTED_AND_TESTED` | redaction unit path, evidence bundle |
-| C17 | Rate limits on session creation and agent turns | `api/http.ts` | `IMPLEMENTED_NOT_TESTED` | in-process only; see §7 |
-| C18 | Operator kill switch checked at approval and at dispatch | `services/execution.ts` | `IMPLEMENTED_AND_TESTED` | `execution.test.ts` |
-| C19 | Scenario controls refuse to run in a hosted environment and are session-scoped | `api/demo/simulate` | `IMPLEMENTED_AND_TESTED` | `api.test.ts` |
-| C20 | Expired sessions refused at resolve; deletion by explicit command with a cascade check | `workspace.ts`, `scripts/purge.mjs` | `IMPLEMENTED_AND_TESTED` | `npm run purge` output |
+| S1 | Someone acts without signing in | Every private route calls `requireSession`; sign-up rate limited | `src/lib/api/http.ts` | security: *denies every private endpoint without a session*, *rejects a forged session cookie* |
+| S2 | Password guessing / user enumeration | scrypt with constant-time compare; dummy hash for unknown emails gives the same timing and answer; sign-in limited to 5 per minute per email and 20 per address, sign-up to 10 per address | `src/lib/services/auth.ts` | integration: *gives the same answer for an unknown email and a wrong password*, *stores a salted scrypt hash* |
+| S3 | Session theft / fixation | HttpOnly, SameSite=Strict, Secure on HTTPS; token rotated on sign-in; sign-out deletes it | `auth.ts`, `http.ts` | security: *sets the session cookie HttpOnly and SameSite=Strict*; integration: *signing out kills the token* |
+| S4 | Cross-site request forgery | Origin allow-list on every mutation, including no-Origin requests | `assertSameOrigin` | security: *refuses a mutation from a foreign origin*, *…with no origin header at all*, *refuses a cross-origin approval / top-up* |
+| S5 | Reading or spending another student's money | Every query is scoped by session; IDs from other sessions return not-found | services | security: *cannot read or execute another session objects*, *cannot send to another student recipient*; integration: *another student cannot use or remove my linked accounts* |
+| S6 | **The AI agent moves money** | The agent has read and propose tools only. No tool executes. A proposal carries a SHA-256 hash of its terms; only the student's approval with that exact hash executes, re-checked under row locks | `src/lib/agent/bank-tools.ts`, `services/wallet.ts` `executeProposal` | security: *a hostile invoice pasted into the assistant cannot execute anything*, *a forged hash moves nothing* |
+| S7 | Prompt injection redirects a payment to a new account | The agent can pay only recipients the student saved themselves and cannot add recipients or link accounts | `bank-tools.ts` | security: *cannot send to another student recipient*; integration agent tests |
+| S8 | Double charge on retry | Idempotency keys on every money movement; provider credits keyed `provider:out_trade_no` | `money-ops.ts`, `connectors/live.ts` `settle` | security: *a replayed payment with the same key is charged once*; verified live: second Alipay/Stripe confirm replays without crediting |
+| S9 | Fake payment confirmation (forged Alipay return URL or notify) | The return URL proves nothing: the server calls `alipay.trade.query` before crediting. Notify requires a valid RSA2 signature and our `app_id`. Stripe credits only when the server retrieves a `succeeded` PaymentIntent whose metadata matches | `connectors/live.ts` | live check: notify with a bad signature returns `failure` / 400; an unpaid PaymentIntent credits nothing |
+| S10 | Amount tampering | Amounts are re-derived server-side; client-supplied fees or "approved" flags are rejected by strict Zod schemas | route schemas | security: *rejects an attempt to supply an amount, a fee or an approved flag*; *refuses an overdraft, a negative amount…* |
+| S11 | Card data exposure | Card numbers are Luhn and expiry checked, then tokenised; only brand and last four are kept. Stripe card entry happens in Stripe's own frame | `connectors/index.ts`, `app/pay.tsx` | integration: *stores only the token, brand and last four* |
+| S12 | Script injection / clickjacking | CSP `default-src 'self'` (plus Stripe's own hosts), `frame-ancestors 'none'`, HSTS preload, nosniff, no-referrer | `next.config.mjs` | live response headers |
+| S13 | Abuse of the public site (free database / free model) | PostgreSQL fixed-window rate limits shared across all instances; assistant 15 per minute per student and 40 per address | `http.ts` `rateLimit`, migration 0013 | integration: *counts in the database, so every server instance shares one window* |
+| S14 | Accounts nobody signed up for | Legacy anonymous demo endpoints return 404 on the hosted site | `assertLegacyDemoEnabled` | unit: *are absent on the hosted site*; live: `POST /api/demo/sessions` → 404 |
+| S15 | Error messages leak internals | Errors map to codes with a correlation ID; no stack traces or configuration | `fail()` | security: *T40 leaks no secret or internal detail in an error*, *health exposes no configuration* |
 
----
+Totals on the release commit: **262 Vitest tests** (95 unit, 130 integration on a real PostgreSQL,
+37 security tests against the running HTTP server) and **10 Playwright journeys** on desktop and phone.
 
-## 5. Prompt injection
+## 3. The agent boundary in one paragraph
+The model is untrusted input with good manners. It sees the student's data through read tools and
+can produce proposals; it cannot execute, cannot add a payee, cannot link an account and cannot
+charge a card. When the live model is unavailable or times out, a deterministic guided planner runs
+the same tools and the interface says so. Live operation is recorded per turn (`agent_runs`: mode,
+model, tokens, error class); the hosted site's first recorded live turn completed on
+`claude-haiku-5-5` on 20 Oct 2026.
 
-Handled structurally, not by instruction. The system prompt tells the model that documents are
-data, but the **control** is that the dangerous capability does not exist.
+## 4. Compliance position (China first)
+- **No real funds are held or moved.** Balances are test funds; Alipay runs in the official
+  open-platform sandbox and Stripe in test mode. The interface labels both.
+- **Stored value, FX and remittance are licensed activities** (PBOC payment licence; SAFE rules and
+  the USD 50,000 personal annual FX quota). BridgeWise's production design is non-custodial, built on
+  a licensed partner; see `docs/GO_LIVE.md`.
+- **Credit:** BridgeWise shows a readiness plan for 征信, 芝麻信用 and 微信支付分 and states on the
+  screen that it is not any of those scores. It never claims access to the PBOC Credit Reference Center.
+- **Personal information (PIPL):** minimal collection (email, first name, balances you enter). No
+  identity documents. Today's database is in Singapore; mainland residents' production data would
+  need a mainland region or a cross-border transfer assessment. Not yet built: a self-service
+  data export and account deletion.
 
-The test that matters plays a fully compromised model that obeys a hostile invoice and calls
-`approve_payment` and `execute_transfer`. Both return `UNKNOWN_TOOL`; no money moves. A claim of
-administrator authority in a tool argument is rejected as an undeclared property.
+## 5. Known weaknesses, stated plainly
+1. **Keys that passed through a chat transcript during development:** the Neon database password,
+   the Stripe test secret key, the Alipay sandbox app private key and an Anthropic key. All will be
+   rotated after judging. The Stripe and Alipay keys are test-only and cannot move real money.
+2. **Fixed-window rate limiting** allows up to twice the limit across a window boundary.
+3. **No Stripe webhook:** a card payment is credited when the page confirms; a closed tab needs a
+   retry of the confirm call (which is idempotent).
+4. **Sandbox connectors** for WeChat Pay and Chinese banks validate and tokenise but call no bank.
+5. **Dependence on third-party public data:** rates (ECB via Frankfurter, exchangerate-api) and Wise
+   comparison quotes. When a source fails the interface says the rate is unavailable rather than
+   inventing one.
+6. The 中文 interface translates the interface text; sentences generated from data (insights and
+   guided-mode replies) remain in English.
 
-Stored hostile strings (`<img src=x onerror=...>`, oversized references) are rendered by React as
-text; no raw HTML is injected anywhere in the application.
-
----
-
-## 6. Failure and recovery
-
-| Situation | Behaviour |
-|---|---|
-| Transaction fails | Nothing is written. No partial financial state is reachable. |
-| Dispatch response lost | `UNKNOWN_OUTCOME`, resolved by asking under the original id. Never resubmitted with a new identity. |
-| Duplicate provider event | Absorbed. Terminal states never move backwards. |
-| Provider rejects | Compensating journal entries restore the balance; history is not deleted. |
-| Delivered but not posted | Tuition remains unpaid and the interface says so. |
-| Model unavailable | Honest `MODEL_UNAVAILABLE`; the deterministic path is unaffected and the stub is **not** substituted. |
-| Audit storage unavailable | Financial mutation fails closed; we do not claim a logged operation succeeded. |
-
----
-
-## 7. Known weaknesses
-
-Stated because they are true, not because they were discovered.
-
-1. **No live model run exists.** The agent is implemented and its boundary is tested, but no
-   `MODEL_API_KEY` is configured, so a live run is neither performed nor claimed.
-2. **The review is a self-review.** It found one high-severity defect (an obligation could be
-   overpaid), but a reviewer who shares the author's blind spots shares their mistakes. An
-   independent pass is outstanding.
-3. **Audit is append-only by discipline, not tamper-proof.** A database administrator can alter
-   rows. Checksums prove a bundle is internally consistent, not that it is complete.
-4. **The rate limiter is in-process.** It is enough to stop a demo being used as a free model
-   endpoint. It is not distributed and would not survive multiple instances.
-5. **Session isolation is a capability, not an identity.** No MFA, no KYC, no verified person.
-6. **Education citations are unverified.** The three cards name sources no human has yet opened,
-   and are served labelled `UNVERIFIED` until that happens.
-7. **Browser tests are not automated.** The journey was checked manually in a real browser.
-8. **Local environment**: the PostgreSQL superuser retains the installer's default password and
-   the server listens on `0.0.0.0:5432`. Outside the application's controls, but a real weakness
-   of the machine this was built on, and it should be corrected before that machine is on an
-   untrusted network.
-9. **No dependency vulnerability scan** has been run against the pinned lockfile.
-
----
-
-## 8. What we do not claim
-
-No compliance with GDPR, PCI DSS, AML/KYC or any banking regulation. No penetration test. No
-certification. No guarantee of correctness beyond the 159 tests listed, which cover what they
-cover and nothing more.
-
----
-
-## 9. Production gaps
-
-Verified customer authentication · provider onboarding and contracts · supported-corridor
-validation · jurisdiction-specific legal review · real consent and identity processes · external
-settlement reconciliation · operational monitoring and alerting · secure data lifecycle · incident
-response · load and reliability testing. None of these is completed by this prototype, and a
-successful sandbox demonstration does not substitute for any of them.
+## 6. What we do not claim
+Not a bank; not licensed; not a real 征信 score; no guarantee of any provider's price beyond the
+moment it was quoted; no claim that a "sent" bill has been received by the university.

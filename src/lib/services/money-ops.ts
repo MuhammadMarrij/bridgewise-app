@@ -28,6 +28,7 @@ import { AppError } from './errors';
 import { CATEGORIES, postStatement, type Category } from './statement';
 import { WALLET_FX_MARGIN_BPS, pocketsFor } from './wallet';
 import type { ResolvedSession } from './workspace';
+import { alipayIdentity } from '../connectors/live';
 
 type Db = NodePgDatabase<Record<string, never>>;
 
@@ -146,6 +147,7 @@ export async function listTransactions(
       amount: formatAmount(r.amountMinor, r.currency as Currency),
       balanceAfter: formatAmount(r.balanceAfterMinor, r.currency as Currency),
       counterparty: r.counterparty,
+      reference: r.reference,
     }));
 }
 
@@ -154,15 +156,23 @@ export async function listTransactions(
 export async function addRecipient(
   db: Db,
   session: ResolvedSession,
-  input: { name: string; relationship: string; country: string; currency: Currency; accountLabel: string },
+  input: { name: string; relationship: string; country: string; currency: Currency; accountLabel?: string; alipayAccount?: string; alipayName?: string },
 ) {
+  // An Alipay payee is paid for real through Alipay's transfer API, always in CNY.
+  const alipayId = input.alipayAccount ? alipayIdentity(input.alipayAccount) : null;
+  if (alipayId && !input.alipayName?.trim()) throw new AppError('VALIDATION_FAILED', 'Alipay checks the real name on the account; enter it');
+  if (!alipayId && !input.accountLabel?.trim()) throw new AppError('VALIDATION_FAILED', 'enter where the money goes');
+  const masked = alipayId ? (alipayId.includes('@') ? `${alipayId[0]}•••@${alipayId.split('@')[1]}` : `••${alipayId.slice(-4)}`) : '';
   const rows = await db.insert(recipients).values({
     sessionId: session.id,
     name: input.name.trim().slice(0, 80),
     relationship: input.relationship.slice(0, 30),
-    country: input.country.slice(0, 2).toUpperCase(),
-    currency: input.currency,
-    accountLabel: input.accountLabel.trim().slice(0, 60),
+    country: alipayId ? 'CN' : input.country.slice(0, 2).toUpperCase(),
+    currency: alipayId ? 'CNY' : input.currency,
+    accountLabel: alipayId ? `Alipay ${masked}` : input.accountLabel!.trim().slice(0, 60),
+    rail: alipayId ? 'alipay' : 'none',
+    payoutIdentity: alipayId,
+    payoutName: alipayId ? input.alipayName!.trim().slice(0, 60) : null,
   }).returning();
   await appendAudit(db, {
     sessionId: session.id, correlationId: rows[0]!.id, type: 'recipient.added', actor: 'user', outcome: 'allowed',
@@ -222,6 +232,9 @@ export async function proposeSend(
   const r = (await db.select().from(recipients)
     .where(and(eq(recipients.id, input.recipientId), eq(recipients.sessionId, session.id))))[0];
   if (!r) throw new AppError('NOT_FOUND', 'no such recipient');
+  if (r.rail !== 'alipay') {
+    throw new AppError('UNSUPPORTED', `Sending to ${r.accountLabel} isn't available yet. BridgeWise pays Alipay accounts in China today.`);
+  }
   const to = r.currency as Currency;
   const receive = parseAmount(input.receiveAmount, to);
   if (receive <= 0n) throw new AppError('VALIDATION_FAILED', 'amount must be above zero');

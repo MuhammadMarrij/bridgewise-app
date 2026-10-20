@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
     const session = await requireSession(req);
-    rateLimit(`alipay:${session.id}`, 10, 60_000);
+    await rateLimit(`alipay:${session.id}`, 10, 60_000);
     const b = await parseBody(req, Body);
     const origin = req.headers.get('origin') ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
     return json(await createAlipayTopUp(getDb(), session, b.amount, origin), { status: 201 });

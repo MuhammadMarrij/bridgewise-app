@@ -72,3 +72,10 @@ project.
 
 **No real provider SDK is integrated.** The payment simulator is our own code
 (`src/lib/simulation/simulator.ts`) and is labelled simulated in every record it produces.
+
+## Update, 20 October 2026
+On 20 October the product scope widened from the single tuition corridor to a multi-currency
+student wallet (see DEC-007 to DEC-010 in `DECISIONS.md`). The same arrangement applies: Claude
+Code wrote the code, tests and documents; the team chose the scope, supplied the accounts and keys,
+performed the sandbox payments, and is accountable for every claim. At runtime the assistant uses
+Anthropic's Claude (`claude-haiku-5-5`) through the API.

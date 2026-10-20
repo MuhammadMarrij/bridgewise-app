@@ -29,6 +29,9 @@ const balance = async (sessionId: string, c: string) =>
 beforeEach(async () => { await truncateAll(pool); });
 afterAll(async () => { await pool.end(); });
 
+const SANDBOX_PAYEE = { account: process.env.ALIPAY_SANDBOX_PAYEE ?? 'pybnum6156@sandbox.com', name: process.env.ALIPAY_SANDBOX_PAYEE_NAME ?? 'pybnum6156' };
+const alipayReady = () => !!(process.env.ALIPAY_APP_ID && process.env.ALIPAY_PUBLIC_KEY);
+
 describe('card validation', () => {
   it('detects networks and checks the Luhn digit', () => {
     expect(cardBrand('4242424242424242')).toBe('visa');
@@ -91,15 +94,20 @@ describe('Alipay, WeChat Pay and Chinese banks', () => {
     expect(await balance(s.id, 'CNY')).toBe(1500000n);
   });
 
-  it('moves money out to Alipay only on approval; a card cannot receive', async () => {
-    if (!(await online())) return console.warn('skipped: offline');
+  it('moves money out to the student\'s own Alipay for real, only on approval; a card or WeChat Pay cannot receive', async () => {
+    if (!(await online()) || !alipayReady()) return console.warn('skipped: offline or Alipay not configured');
     const s = await student();
-    const ali = await linkSource(db, s, { kind: 'wallet', provider: 'alipay', account: '13812345678', holder: 'Zhang Wei' });
-    const p = await proposeWithdrawal(db, s, { sourceId: ali.id, receiveAmount: '800.00', fromCurrency: 'GBP', proposedBy: 'agent' });
+    const ali = await linkSource(db, s, { kind: 'wallet', provider: 'alipay', account: SANDBOX_PAYEE.account, holder: SANDBOX_PAYEE.name });
+    const p = await proposeWithdrawal(db, s, { sourceId: ali.id, receiveAmount: '8.00', fromCurrency: 'GBP', proposedBy: 'agent' });
     expect(await balance(s.id, 'GBP')).toBe(50000n);
     await executeProposal(db, s, p.id, p.termsHash);
     expect(await balance(s.id, 'GBP')).toBeLessThan(50000n);
-    expect((await listTransactions(db, s.id))[0]).toMatchObject({ kind: 'withdraw' });
+    const out = (await listTransactions(db, s.id))[0]!;
+    expect(out).toMatchObject({ kind: 'withdraw' });
+    expect(out.reference).toMatch(/^\d{10,}$/);
+
+    const wx = await linkSource(db, s, { kind: 'wallet', provider: 'wechatpay', account: '13812345678', holder: 'Zhang Wei' });
+    await expect(proposeWithdrawal(db, s, { sourceId: wx.id, receiveAmount: '10.00', proposedBy: 'user' })).rejects.toThrow(/isn't available yet/);
 
     const card = await linkSource(db, s, { kind: 'card', number: '5555555555554444', expiry: '12/30', cvc: '123', holder: 'W', currency: 'GBP' });
     await expect(proposeWithdrawal(db, s, { sourceId: card.id, receiveAmount: '10.00', proposedBy: 'user' })).rejects.toThrow(/not a card/);

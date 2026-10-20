@@ -8,8 +8,7 @@ import {
   fail,
   json,
   parseBody,
-  requireSession,
-} from '@/lib/api/http';
+  requireSession, assertLegacyDemoEnabled } from '@/lib/api/http';
 import { transfers } from '@/lib/db/schema';
 import { AppError } from '@/lib/services/errors';
 import { transferStatus } from '@/lib/services/execution';
@@ -27,6 +26,7 @@ const Body = z.object({ event: z.enum(['deliver', 'post', 'reject']) }).strict()
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
+    assertLegacyDemoEnabled();
     if (!demoControlsEnabled()) {
       throw new AppError('UNSUPPORTED', 'scenario controls are disabled in this environment');
     }

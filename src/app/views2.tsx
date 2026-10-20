@@ -149,7 +149,7 @@ export function SendMoney(ctx: Ctx) {
   const { home } = ctx.data.profile;
   const [list, setList] = useState<Json[]>([]);
   const [adding, setAdding] = useState(false);
-  const [nr, setNr] = useState({ name: '', relationship: 'family', country: 'CN', currency: home, accountLabel: '' });
+  const [nr, setNr] = useState({ name: '', relationship: 'friend', country: 'CN', currency: 'CNY', alipayAccount: '', alipayName: '' });
   const [sel, setSel] = useState<string>('');
   const [amt, setAmt] = useState('');
   const [from, setFrom] = useState('');
@@ -181,11 +181,10 @@ export function SendMoney(ctx: Ctx) {
             <div className="field-row">
               <div><label htmlFor="r-n">Name</label><input id="r-n" value={nr.name} onChange={(e) => setNr({ ...nr, name: e.target.value })} placeholder="Mum" required /></div>
               <div><label htmlFor="r-rel">Relationship</label><select id="r-rel" value={nr.relationship} onChange={(e) => setNr({ ...nr, relationship: e.target.value })}>{['family', 'friend', 'landlord', 'university', 'other'].map((x) => <option key={x}>{x}</option>)}</select></div>
-              <div><label htmlFor="r-c">Receives in</label><select id="r-c" value={nr.currency} onChange={(e) => setNr({ ...nr, currency: e.target.value })}>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}</select></div>
-              <div><label htmlFor="r-co">Country code</label><input id="r-co" maxLength={2} value={nr.country} onChange={(e) => setNr({ ...nr, country: e.target.value.toUpperCase() })} /></div>
-              <div><label htmlFor="r-a">Account</label><input id="r-a" value={nr.accountLabel} onChange={(e) => setNr({ ...nr, accountLabel: e.target.value })} placeholder="Alipay ••4471 / IBAN ••2201" required /></div>
+              <div><label htmlFor="r-a">Their Alipay account</label><input id="r-a" value={nr.alipayAccount} onChange={(e) => setNr({ ...nr, alipayAccount: e.target.value })} placeholder="Mobile number or email" autoComplete="off" required /></div>
+              <div><label htmlFor="r-rn">Real name on that Alipay</label><input id="r-rn" value={nr.alipayName} onChange={(e) => setNr({ ...nr, alipayName: e.target.value })} placeholder="李娜" autoComplete="off" required /></div>
             </div>
-            <p className="hint">Only you can add recipients. The assistant can send only to people saved here — so no message or invoice can trick it into paying a new account.</p>
+            <p className="hint">Money goes straight into their Alipay, in CNY; Alipay checks the real name before paying. Only you can add recipients, so no message or invoice can make the assistant pay a new account. Transfers to banks and wallets in Pakistan aren’t available yet.</p>
             <div><button className="btn small">Save recipient</button></div>
           </form>
         )}

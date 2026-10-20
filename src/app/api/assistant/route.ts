@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
     const session = await requireSession(req);
-    rateLimit(`assistant:${session.id}`, 15, 60_000);
-    rateLimit(`assistant-ip:${clientKey(req)}`, 40, 60_000);
+    await rateLimit(`assistant:${session.id}`, 15, 60_000);
+    await rateLimit(`assistant-ip:${clientKey(req)}`, 40, 60_000);
     const body = await parseBody(req, Body);
     const db = getDb();
     const zh = body.lang === 'zh';

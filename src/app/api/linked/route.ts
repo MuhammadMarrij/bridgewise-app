@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     assertSameOrigin(req);
     const session = await requireSession(req);
     // Card linking is a classic card-testing target; keep it slow.
-    rateLimit(`link:${session.id}`, 10, 60_000);
+    await rateLimit(`link:${session.id}`, 10, 60_000);
     const body = await parseBody(req, Body);
     return json({ source: await linkSource(getDb(), session, body as LinkInput) }, { status: 201 });
   } catch (error) {

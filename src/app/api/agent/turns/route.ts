@@ -48,8 +48,8 @@ export async function POST(req: NextRequest) {
     const session = await requireSession(req).catch(() => null);
     // The model is the expensive part. Bound it per session and per client so a
     // public demo cannot be used as somebody's free API.
-    if (session) rateLimit(`agent:${session.id}`, 10, 60_000);
-    rateLimit(`agent-ip:${clientKey(req)}`, 30, 60_000);
+    if (session) await rateLimit(`agent:${session.id}`, 10, 60_000);
+    await rateLimit(`agent-ip:${clientKey(req)}`, 30, 60_000);
     const body = await parseBody(req, Body);
     const db = getDb();
 

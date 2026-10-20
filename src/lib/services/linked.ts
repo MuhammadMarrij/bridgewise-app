@@ -21,6 +21,7 @@ import { AppError } from './errors';
 import { topUp } from './money-ops';
 import { WALLET_FX_MARGIN_BPS, pocketsFor } from './wallet';
 import type { ResolvedSession } from './workspace';
+import { alipayIdentity } from '../connectors/live';
 
 type Db = NodePgDatabase<Record<string, never>>;
 
@@ -56,6 +57,7 @@ export async function linkSource(db: Db, session: ResolvedSession, input: LinkIn
   const rows = await db.insert(linkedSources).values({
     sessionId: session.id, kind: input.kind, provider: provider!, label: r!.label, last4: r!.last4, brand: r!.brand,
     currency: r!.currency, holder: r!.holder, expiry: r!.expiry, token: r!.token, connectorMode: CONNECTOR_MODE,
+    payoutIdentity: input.kind === 'wallet' && input.provider === 'alipay' ? alipayIdentity(input.account) : null,
   }).returning();
   await appendAudit(db, {
     sessionId: session.id, correlationId: rows[0]!.id, type: 'source.linked', actor: 'user', outcome: 'allowed',
@@ -139,6 +141,8 @@ export async function proposeWithdrawal(
 ) {
   const src = await ownedSource(db, session.id, input.sourceId);
   if (src.kind === 'card') throw new AppError('UNSUPPORTED', 'withdrawals go to a bank account or mobile wallet, not a card');
+  if (src.provider !== 'alipay') throw new AppError('UNSUPPORTED', `Moving money to ${src.label} isn't available yet. BridgeWise can pay out to Alipay today.`);
+  if (!src.payoutIdentity || !src.holder) throw new AppError('UNSUPPORTED', 'Link your Alipay again with its account and real name to move money out');
   const to = src.currency as Currency;
   const receive = parseAmount(input.receiveAmount, to);
   if (receive <= 0n) throw new AppError('VALIDATION_FAILED', 'amount must be above zero');

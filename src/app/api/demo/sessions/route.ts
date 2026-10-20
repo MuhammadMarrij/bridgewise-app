@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getDb } from '@/lib/db/client';
-import { assertSameOrigin, clientKey, fail, json, parseBody, rateLimit } from '@/lib/api/http';
+import { assertSameOrigin, clientKey, fail, json, parseBody, rateLimit, assertLegacyDemoEnabled } from '@/lib/api/http';
 import { SESSION_COOKIE, SESSION_LIFETIME_MS, createWorkspace } from '@/lib/services/workspace';
 
 const Body = z
@@ -10,12 +10,13 @@ const Body = z
 
 export async function POST(req: NextRequest) {
   try {
+    assertLegacyDemoEnabled();
     assertSameOrigin(req);
     // A public demo must not become a free database. Session creation is bounded.
     // Configurable because a browser test suite legitimately creates many
     // workspaces from one address. The control stays; only its threshold moves,
     // and the default is the conservative one.
-    rateLimit(`sessions:${clientKey(req)}`, Number(process.env.SESSION_RATE_LIMIT_PER_MINUTE ?? 20), 60_000);
+    await rateLimit(`sessions:${clientKey(req)}`, Number(process.env.SESSION_RATE_LIMIT_PER_MINUTE ?? 20), 60_000);
     const body = await parseBody(req, Body);
     const created = await createWorkspace(getDb(), { kind: body.scenario });
 

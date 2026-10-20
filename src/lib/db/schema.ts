@@ -428,6 +428,7 @@ export const walletTransactions = pgTable('wallet_transactions', {
   proposalId: uuid('proposal_id'),
   idempotencyKey: text('idempotency_key'),
   linkedSourceId: uuid('linked_source_id'),
+  reference: text('reference'),
   createdAt: instant('created_at').notNull().defaultNow(),
 }, (t) => [index('wtx_session_time_idx').on(t.sessionId, t.createdAt)]);
 
@@ -439,6 +440,9 @@ export const recipients = pgTable('recipients', {
   country: text('country').notNull(),
   currency: text('currency').notNull(),
   accountLabel: text('account_label').notNull(),
+  rail: text('rail').notNull().default('none'), // alipay | none
+  payoutIdentity: text('payout_identity'),
+  payoutName: text('payout_name'),
   createdAt: instant('created_at').notNull().defaultNow(),
 });
 
@@ -455,6 +459,7 @@ export const linkedSources = pgTable('linked_sources', {
   holder: text('holder'),
   expiry: text('expiry'),
   token: text('token').notNull(),
+  payoutIdentity: text('payout_identity'),
   connectorMode: text('connector_mode').notNull().default('sandbox'),
   status: text('status').notNull().default('ACTIVE'),
   createdAt: instant('created_at').notNull().defaultNow(),
@@ -488,4 +493,18 @@ export const externalPayments = pgTable('external_payments', {
   providerRef: text('provider_ref'),
   createdAt: instant('created_at').notNull().defaultNow(),
   settledAt: instant('settled_at'),
+});
+
+/** A money movement that left through a provider. proposal_id is the idempotency key. */
+export const payouts = pgTable('payouts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  proposalId: uuid('proposal_id').notNull().unique(),
+  provider: text('provider').notNull(),
+  currency: text('currency').notNull(),
+  amountMinor: minor('amount_minor').notNull(),
+  payee: text('payee').notNull(),
+  status: text('status').notNull(),
+  providerRef: text('provider_ref'),
+  createdAt: instant('created_at').notNull().defaultNow(),
 });

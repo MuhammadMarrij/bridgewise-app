@@ -3,6 +3,8 @@
 **An AI-native cross-border money app for international students.**
 Topic C — Cross-border & Student Finance Assistant · iCANX Fintechathon · Team Innovative Brothers
 
+**Live:** https://bridgewise-azure.vercel.app · English / 中文
+
 An international student lives in two currencies: money arrives from family in one, tuition and rent
 are billed in another. Today that means a home bank app, a remittance app, a spreadsheet and a
 calendar — and losing money to exchange-rate margins nobody shows them.
@@ -16,6 +18,11 @@ itself** — every action is a card the student approves.
 
 | | |
 |---|---|
+| **Account** | Email and password sign-up; China-first starting profiles (Pakistan→China, India→China, China→UK, Pakistan→US) |
+| **Add money for real rails** | Through **Alipay's official sandbox cashier** or a card via **Stripe** (test mode); credited only after the provider confirms |
+| **Cards & accounts** | Link UnionPay / Visa / Mastercard cards, Alipay, WeChat Pay, CCB, ICBC, BOC, ABC, CMB and home banks; card numbers tokenised, never stored |
+| **Credit in China** | A plan for 征信, 芝麻信用 and 微信支付分, with steps detected from the account; never presented as a score |
+| **中文** | The whole interface in Simplified Chinese; the live assistant replies in Chinese |
 | **Home briefing** | The assistant opens with what matters today: bills due and whether they're covered, how the student's own exchange rate moved this week, alerts that fired, actions waiting |
 | **Multi-currency wallet** | GBP, USD, CNY, PKR, INR, EUR and more, one pocket each, valued at live rates; add money, pay, convert with the fee shown before you approve |
 | **Statement** | Every movement on every pocket with the balance after it, filterable by pocket and category |
@@ -43,6 +50,8 @@ drives the same tools and is labelled as such.
 
 | Real, live | BridgeWise's own |
 |---|---|
+| AI agent: Anthropic Claude (`claude-haiku-5-5`), live on the hosted site | |
+| Alipay open-platform **sandbox** and Stripe **test mode**: real SDKs, real signatures, real cashier | Sandbox connectors for WeChat Pay and Chinese banks |
 | Exchange rates — European Central Bank (Frankfurter), exchangerate-api | The ledger: double-entry core banking book |
 | 30-day rate history — ECB | Balances are test funds in that ledger |
 | 17 provider quotes — Wise public comparison | External settlement rails are integration points, not called |
@@ -65,15 +74,15 @@ Node 20+, PostgreSQL 17.
 ## Tests
 
 ```bash
-npm run test:unit           # 93  — money maths, planner, live-data adapters
-npm run test:integration    # 113 — real PostgreSQL: wallet, statement, approvals, concurrency, isolation
+npm run test:unit           # 95   — money maths, planner, live-data adapters
+npm run test:integration    # 130 — real PostgreSQL: wallet, statement, approvals, concurrency, isolation
 npm run test:security       # 37  — attacks the running HTTP API (start the app first)
-npm run test:e2e            # 9   — Playwright, desktop and phone
+npm run test:e2e            # 10  — Playwright, desktop and phone
 npm run eval:stub           # agent boundary, scripted
 npm run eval:live           # agent with a real model (needs MODEL_API_KEY)
 ```
 
 ## Documents
 
-`docs/ARCHITECTURE.md` (start here) · `docs/SECURITY_REPORT.md` · `docs/REVIEW_FINDINGS.md` ·
-`docs/AI-DISCLOSURE.md`
+`docs/TECHNICAL-REPORT.md` (start here) · `docs/SECURITY_REPORT.md` · `docs/GO_LIVE.md` (what turns each
+sandbox into real money) · `docs/DEPLOY.md` · `docs/ARCHITECTURE.md` · `docs/AI-DISCLOSURE.md`

@@ -7,7 +7,7 @@
  *
  * It copies, hashes and inventories. It does not write any claim of its own.
  */
-import { mkdirSync, copyFileSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, copyFileSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
@@ -20,22 +20,25 @@ const REQUIRED = [
   ['README.md', 'README.md'],
   ['docs/TECHNICAL-REPORT.md', 'technical-report.md'],
   ['docs/SECURITY_REPORT.md', 'security-assessment.md'],
-  ['docs/DEMO-SCRIPT.md', 'demo-script.md'],
-  ['docs/REVIEW_FINDINGS.md', 'review-findings.md'],
-  ['docs/PROGRESS.md', 'progress.md'],
-  ['docs/TEAM_BRIEF.md', 'team-brief.md'],
-  ['evidence/run-manifest.json', 'evidence/run-manifest.json'],
-  ['evidence/http-trace.jsonl', 'evidence/http-trace.jsonl'],
-  ['evidence/audit-export.json', 'evidence/audit-export.json'],
-  ['evidence/checksums.txt', 'evidence/checksums.txt'],
+  ['docs/GO_LIVE.md', 'go-live.md'],
+  ['docs/VIDEO_SCRIPT.md', 'video-script.md'],
+  ['docs/DEPLOY.md', 'deploy.md'],
+  ['docs/AI-DISCLOSURE.md', 'ai-disclosure.md'],
+  ['evidence/verification.md', 'evidence/verification.md'],
 ];
 
-/** Expected but not yet produced: listed as MISSING rather than quietly omitted. */
+/** Made by a human; listed as MISSING rather than quietly omitted. Kept across runs. */
 const EXPECTED_HUMAN = [
-  ['submission/demo.mp4', 'a screen recording under five minutes'],
-  ['submission/presentation.pdf', 'the deck, under ten minutes of narration'],
+  ['demo.mp4', 'a screen recording under five minutes'],
+  ['presentation.pptx', 'the deck, under ten minutes of narration'],
 ];
 
+// Start clean so no file from an earlier version of the product survives,
+// except the human-made ones.
+const keep = new Set(EXPECTED_HUMAN.map(([f]) => f));
+if (existsSync(OUT)) {
+  for (const f of readdirSync(OUT)) if (!keep.has(f)) rmSync(path.join(OUT, f), { recursive: true, force: true });
+}
 mkdirSync(path.join(OUT, 'evidence'), { recursive: true });
 
 for (const [from, to] of REQUIRED) {
@@ -48,17 +51,6 @@ for (const [from, to] of REQUIRED) {
   copyFileSync(from, target);
 }
 
-// The evidence must describe a run that actually completed.
-let manifest = null;
-if (existsSync('evidence/run-manifest.json')) {
-  manifest = JSON.parse(readFileSync('evidence/run-manifest.json', 'utf8'));
-  if (manifest.outcome?.status !== 'COMPLETED') {
-    problems.push(`evidence run did not complete: ${JSON.stringify(manifest.outcome)}`);
-  }
-} else {
-  problems.push('MISSING evidence: run `npm run evidence` with the app running');
-}
-
 let commit = 'unknown';
 let dirty = false;
 try {
@@ -66,38 +58,9 @@ try {
   dirty = execSync('git status --porcelain', { encoding: 'utf8' }).trim().length > 0;
 } catch { /* not a git checkout */ }
 
-if (manifest && manifest.release?.commit !== commit) {
-  // Equality is the wrong test. Committing the evidence itself necessarily moves
-  // HEAD past the commit the evidence names, so a strict check can never be
-  // satisfied. What matters is whether the CODE changed since capture: evidence
-  // captured from code that is no longer the release is the real danger, while a
-  // commit that merely adds the evidence files is not.
-  const captured = manifest.release?.commit ?? '';
-  try {
-    execSync(`git merge-base --is-ancestor ${captured} HEAD`, { stdio: 'ignore' });
-    const changed = execSync(`git diff --name-only ${captured} HEAD`, { encoding: 'utf8' })
-      .split('\n')
-      .filter(Boolean)
-      .filter((f) => /^(src|drizzle|scripts)\//.test(f));
-    if (changed.length > 0) {
-      problems.push(
-        `evidence was captured at ${captured.slice(0, 7)} and code has changed since ` +
-          `(${changed.slice(0, 5).join(', ')}). Re-run the evidence step.`,
-      );
-    } else {
-      console.log(`note: evidence captured at ${captured.slice(0, 7)}; no code has changed since.`);
-    }
-  } catch {
-    problems.push(
-      `evidence was captured at ${captured.slice(0, 7)}, which is not an ancestor of ` +
-        `HEAD (${commit.slice(0, 7)}). Re-run the evidence step.`,
-    );
-  }
-}
-
 const humanTodo = EXPECTED_HUMAN
-  .filter(([file]) => !existsSync(file))
-  .map(([file, what]) => ({ file, what, status: 'MISSING' }));
+  .filter(([file]) => !existsSync(path.join(OUT, file)))
+  .map(([file, what]) => ({ file: `submission/${file}`, what, status: 'MISSING' }));
 
 const inventory = [];
 walk(OUT, (file) => {
@@ -116,12 +79,14 @@ writeFileSync(
     {
       release: { commit, workingTreeDirty: dirty },
       builtAt: new Date().toISOString(),
+      live: 'https://bridgewise-azure.vercel.app',
       // Repeated here so the bundle carries its own disclaimer.
       provenance: {
-        simulated: true,
-        liveProviderUsed: false,
-        liveModelUsed: manifest?.provenance?.liveModelUsed ?? false,
-        note: 'No real funds moved. All providers, rates, accounts and recipients are synthetic.',
+        realFundsMoved: false,
+        paymentRails: 'Alipay open-platform sandbox; Stripe test mode',
+        rates: 'Live: ECB via Frankfurter, exchangerate-api, Wise public comparison',
+        balances: 'Test funds in BridgeWise\'s own double-entry ledger',
+        note: 'See evidence/verification.md for what was verified and how.',
       },
       files: inventory,
       stillRequiredFromAHuman: humanTodo,
@@ -138,19 +103,16 @@ writeFileSync(
 
 console.log(`packaged ${inventory.length} file(s) into ${OUT}`);
 if (dirty) console.log('NOTE: the working tree has uncommitted changes.');
-for (const t of humanTodo) console.log(`TODO (human): ${t.file} — ${t.what}`);
-
+for (const t of humanTodo) console.log(`STILL NEEDED: ${t.file} (${t.what})`);
 if (problems.length) {
-  console.error('\nPACKAGE INCOMPLETE:');
-  for (const p of problems) console.error(`  - ${p}`);
+  for (const p of problems) console.error(p);
   process.exit(1);
 }
-console.log('\nAll required artefacts present.');
 
 function walk(dir, fn) {
   for (const entry of readdirSync(dir)) {
-    const full = path.join(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, fn);
-    else fn(full);
+    const p = path.join(dir, entry);
+    if (statSync(p).isDirectory()) walk(p, fn);
+    else fn(p);
   }
 }

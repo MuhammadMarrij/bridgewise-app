@@ -110,18 +110,20 @@ test('add money, pay for something, and see both on the statement with running b
   await expect(page.getByText('bal 1,110.00')).toBeVisible();
 });
 
-test('a new recipient is saved by the student and paid only after approval', async ({ page }) => {
+test('a new Alipay recipient is saved by the student and paid through Alipay only after approval', async ({ page }) => {
   await open(page);
   await page.getByRole('button', { name: 'Send' }).first().click();
   await page.getByRole('button', { name: 'New recipient' }).click();
-  await page.getByLabel('Name').fill('Mum');
-  await page.getByLabel('Account').fill('Alipay 4471');
+  await page.getByLabel('Name', { exact: true }).fill('Li Na');
+  // The Alipay sandbox pays only its own accounts: this is the project's sandbox buyer.
+  await page.getByLabel('Their Alipay account').fill(process.env.ALIPAY_SANDBOX_PAYEE ?? 'pybnum6156@sandbox.com');
+  await page.getByLabel('Real name on that Alipay').fill(process.env.ALIPAY_SANDBOX_PAYEE_NAME ?? 'pybnum6156');
   await page.getByRole('button', { name: 'Save recipient' }).click();
-  await page.getByLabel(/They receive/).fill('500.00');
+  await page.getByLabel(/They receive/).fill('5.00');
   await page.getByRole('button', { name: 'Get quote' }).click();
-  await expect(page.getByText('Send 500.00 CNY to Mum')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Send 5.00 CNY to Li Na')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Approve' }).first().click();
-  await expect(page.getByText('Sent 500.00 CNY to Mum.')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Sent 5.00 CNY to Li Na.')).toBeVisible({ timeout: 20_000 });
 });
 
 test('a budget shows spending against its limit', async ({ page }) => {

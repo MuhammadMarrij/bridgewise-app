@@ -12,8 +12,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { accounts, actionProposals, beneficiaries, ledgerEntries, linkedSources, obligations, recipients, sessions } from '../db/schema';
-import { push as connectorPush } from '../connectors';
+import { accounts, actionProposals, beneficiaries, ledgerEntries, linkedSources, obligations, payouts, recipients, sessions } from '../db/schema';
+import { alipayTransfer } from '../connectors/live';
 import {
   CURRENCY_REGISTRY,
   formatAmount,
@@ -538,6 +538,20 @@ async function executeSend(tx: Db, session: ResolvedSession, proposal: typeof ac
   if (debit > pocket.balanceMinor - pocket.reservedMinor) {
     throw new AppError('INSUFFICIENT_FUNDS', 'your balance changed since this was quoted');
   }
+  if (r.rail !== 'alipay' || !r.payoutIdentity || !r.payoutName || t.receiveCurrency !== 'CNY') {
+    throw new AppError('UNSUPPORTED', `Sending to ${r.accountLabel} isn't available yet`);
+  }
+  // Every check has passed: the money leaves through Alipay now. If anything
+  // below fails the transaction rolls back, and a retry reuses the same
+  // out_biz_no, which Alipay will not pay twice.
+  const paid = await alipayTransfer({
+    outBizNo: proposal.id.replace(/-/g, ''), amount: t.receiveAmount,
+    identity: r.payoutIdentity, name: r.payoutName, title: `BridgeWise · ${r.name}`,
+  });
+  await tx.insert(payouts).values({
+    sessionId: session.id, proposalId: proposal.id, provider: 'alipay', currency: t.receiveCurrency,
+    amountMinor: credit, payee: r.accountLabel, status: 'PAID', providerRef: paid.orderId,
+  });
   const after = pocket.balanceMinor - debit;
   await tx.update(accounts).set({ balanceMinor: after, version: pocket.version + 1 }).where(eq(accounts.id, pocket.id));
   await tx.insert(ledgerEntries).values(
@@ -554,12 +568,12 @@ async function executeSend(tx: Db, session: ResolvedSession, proposal: typeof ac
         ],
   );
   await postStatement(tx, {
-    sessionId: session.id, accountId: pocket.id, kind: 'send', description: `To ${r.name} · ${r.accountLabel}`,
-    category: r.relationship === 'family' ? 'family' : 'other', currency: t.fromCurrency,
-    amountMinor: -debit, balanceAfterMinor: after, counterparty: r.name, proposalId: proposal.id,
+    sessionId: session.id, accountId: pocket.id, kind: 'send', description: `To ${r.name} · Alipay`,
+    category: r.relationship === 'family' ? 'family' : r.relationship === 'landlord' ? 'rent' : 'other', currency: t.fromCurrency,
+    amountMinor: -debit, balanceAfterMinor: after, counterparty: r.name, proposalId: proposal.id, reference: paid.orderId,
   });
   const now = new Date();
-  const outcome = { sent: `${t.receiveAmount} ${t.receiveCurrency}`, to: r.name, debited: `${t.debitAmount} ${t.fromCurrency}`, status: 'SENT' };
+  const outcome = { sent: `${t.receiveAmount} ${t.receiveCurrency}`, to: r.name, debited: `${t.debitAmount} ${t.fromCurrency}`, reference: paid.orderId, status: 'PAID' };
   await tx.update(actionProposals).set({ status: 'EXECUTED', decidedAt: now, resultJson: outcome }).where(eq(actionProposals.id, proposal.id));
   await appendAudit(tx, {
     sessionId: session.id, correlationId: proposal.id, type: 'transfer.sent', actor: 'user', outcome: 'allowed',
@@ -587,7 +601,18 @@ async function executeWithdraw(tx: Db, session: ResolvedSession, proposal: typeo
   const debit = parseAmount(t.debitAmount, t.fromCurrency);
   const credit = parseAmount(t.receiveAmount, t.receiveCurrency);
   if (debit > pocket.balanceMinor - pocket.reservedMinor) throw new AppError('INSUFFICIENT_FUNDS', 'your balance changed since this was quoted');
-  const out = connectorPush(src.kind as 'wallet' | 'bank', src.token, credit);
+  if (src.provider !== 'alipay' || !src.payoutIdentity || !src.holder || t.receiveCurrency !== 'CNY') {
+    throw new AppError('UNSUPPORTED', `Moving money to ${src.label} isn't available yet`);
+  }
+  const paid = await alipayTransfer({
+    outBizNo: proposal.id.replace(/-/g, ''), amount: t.receiveAmount,
+    identity: src.payoutIdentity, name: src.holder, title: 'BridgeWise · to my Alipay',
+  });
+  await tx.insert(payouts).values({
+    sessionId: session.id, proposalId: proposal.id, provider: 'alipay', currency: t.receiveCurrency,
+    amountMinor: credit, payee: src.label, status: 'PAID', providerRef: paid.orderId,
+  });
+  const out = { reference: paid.orderId };
   const after = pocket.balanceMinor - debit;
   await tx.update(accounts).set({ balanceMinor: after, version: pocket.version + 1 }).where(eq(accounts.id, pocket.id));
   await tx.insert(ledgerEntries).values(
@@ -604,12 +629,12 @@ async function executeWithdraw(tx: Db, session: ResolvedSession, proposal: typeo
         ],
   );
   await postStatement(tx, {
-    sessionId: session.id, accountId: pocket.id, kind: 'withdraw', description: `To ${src.label} · ${out.reference}`,
-    category: 'other', currency: t.fromCurrency, amountMinor: -debit, balanceAfterMinor: after,
+    sessionId: session.id, accountId: pocket.id, kind: 'withdraw', description: `To my ${src.label}`,
+    category: 'other', reference: out.reference, currency: t.fromCurrency, amountMinor: -debit, balanceAfterMinor: after,
     counterparty: src.label, proposalId: proposal.id, linkedSourceId: src.id,
   });
   const now = new Date();
-  const outcome = { moved: `${t.receiveAmount} ${t.receiveCurrency}`, to: src.label, debited: `${t.debitAmount} ${t.fromCurrency}`, reference: out.reference, status: 'SENT' };
+  const outcome = { moved: `${t.receiveAmount} ${t.receiveCurrency}`, to: src.label, debited: `${t.debitAmount} ${t.fromCurrency}`, reference: out.reference, status: 'PAID' };
   await tx.update(actionProposals).set({ status: 'EXECUTED', decidedAt: now, resultJson: outcome }).where(eq(actionProposals.id, proposal.id));
   await appendAudit(tx, {
     sessionId: session.id, correlationId: proposal.id, type: 'wallet.withdrawn', actor: 'user', outcome: 'allowed',
