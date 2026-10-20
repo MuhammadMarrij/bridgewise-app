@@ -12,6 +12,7 @@ import { formatAmount, parseRate, sourcePrincipalFor, type Currency } from '../d
 import { fxHistory } from '../rates/history';
 import { liveMidRate } from '../rates/live';
 import { listProposals, pocketsFor } from './wallet';
+import { listBudgets, spendingSummary } from './money-ops';
 import type { ResolvedSession } from './workspace';
 
 type Db = NodePgDatabase<Record<string, never>>;
@@ -108,7 +109,36 @@ export async function insightsFor(
     } catch { /* skip */ }
   }
 
-  // 4. Things waiting on the student.
+  // 4. Budgets: over, or close to it, this month.
+  for (const b of (await listBudgets(db, session.id)).filter((x) => x.percent >= 85)) {
+    out.push({
+      id: `budget-${b.category}`,
+      severity: b.over ? 'attention' : 'info',
+      title: b.over
+        ? `You're over your ${b.category} budget by ${String(b.remaining).replace('-', '')} ${b.currency}`
+        : `${Math.round(b.percent)}% of your ${b.category} budget is used`,
+      body: `${b.spent} of ${b.limit} ${b.currency} this month.`,
+      ask: `Where did my ${b.category} money go this month, and how can I cut back?`,
+      askLabel: 'Analyse',
+    });
+  }
+
+  // 5. Runway: whether everyday spending is outpacing the wallet.
+  try {
+    const s = await spendingSummary(db, session.id, profile.study, 30);
+    if (s.runwayDays !== null && s.runwayDays < 60) {
+      out.push({
+        id: 'runway',
+        severity: s.runwayDays < 30 ? 'urgent' : 'attention',
+        title: `At this pace your money lasts about ${s.runwayDays} days`,
+        body: `You're spending around ${s.averageDaily} ${s.display} a day, excluding tuition.`,
+        ask: 'How long will my money last, and what should I change?',
+        askLabel: 'Plan',
+      });
+    }
+  } catch { /* rates unavailable: skip rather than guess */ }
+
+  // 6. Things waiting on the student.
   const pending = await listProposals(db, session.id, true);
   if (pending.length) {
     out.push({

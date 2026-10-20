@@ -12,7 +12,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { accounts, actionProposals, beneficiaries, ledgerEntries, obligations, sessions } from '../db/schema';
+import { accounts, actionProposals, beneficiaries, ledgerEntries, obligations, recipients, sessions } from '../db/schema';
 import {
   CURRENCY_REGISTRY,
   formatAmount,
@@ -25,6 +25,7 @@ import { canonicalize, hashSecret } from '../policy/terms';
 import { liveMidRate, rateTable, type RateTable } from '../rates/live';
 import { appendAudit } from './audit';
 import { AppError } from './errors';
+import { postStatement } from './statement';
 import type { ResolvedSession } from './workspace';
 
 type Db = NodePgDatabase<Record<string, never>>;
@@ -83,14 +84,25 @@ export async function openStudentAccount(db: Db, profile: StudentProfile): Promi
   // A USD pocket is the common third currency for international students.
   if (!pockets.has('USD')) pockets.set('USD', 0n);
 
-  await db.insert(accounts).values(
+  const opened = await db.insert(accounts).values(
     [...pockets].map(([currency, balanceMinor]) => ({
       sessionId: session.id,
       label: `${currency} pocket`,
       currency,
       balanceMinor,
     })),
-  );
+  ).returning();
+  for (const a of opened) {
+    if (a.balanceMinor <= 0n) continue;
+    await db.insert(ledgerEntries).values([
+      { bucket: 'student_account', accountId: a.id, currency: a.currency, signedMinor: a.balanceMinor },
+      { bucket: 'funding', currency: a.currency, signedMinor: -a.balanceMinor },
+    ]);
+    await postStatement(db, {
+      sessionId: session.id, accountId: a.id, kind: 'opening', description: 'Opening balance',
+      category: 'income', currency: a.currency, amountMinor: a.balanceMinor, balanceAfterMinor: a.balanceMinor,
+    });
+  }
 
   await appendAudit(db, {
     sessionId: session.id,
@@ -348,6 +360,9 @@ export async function executeProposal(
       throw new AppError('TERMS_CHANGED', 'the terms changed since you reviewed them');
     }
 
+    if (proposal.kind === 'send') {
+      return executeSend(tx as unknown as Db, session, proposal);
+    }
     if (proposal.kind === 'pay_bill') {
       return executeBillPayment(tx as unknown as Db, session, proposal);
     }
@@ -384,6 +399,14 @@ export async function executeProposal(
       { proposalId: id, bucket: 'student_account', accountId: dst.id, currency: t.to, signedMinor: buy },
     ]);
 
+    await postStatement(tx as unknown as Db, {
+      sessionId: session.id, accountId: src.id, kind: 'convert_out', description: `Converted to ${t.to}`,
+      category: 'fx', currency: t.from, amountMinor: -sell, balanceAfterMinor: src.balanceMinor - sell, proposalId: id,
+    });
+    await postStatement(tx as unknown as Db, {
+      sessionId: session.id, accountId: dst.id, kind: 'convert_in', description: `Converted from ${t.from}`,
+      category: 'fx', currency: t.to, amountMinor: buy, balanceAfterMinor: dst.balanceMinor + buy, proposalId: id,
+    });
     const outcome = { sold: `${t.sellAmount} ${t.from}`, bought: `${t.buyAmount} ${t.to}`, rate: t.customerRate };
     await tx.update(actionProposals)
       .set({ status: 'EXECUTED', decidedAt: new Date(), resultJson: outcome })
@@ -465,6 +488,12 @@ async function executeBillPayment(
 
   const now = new Date();
   await tx.update(obligations).set({ paidAt: now, paidProposalId: proposal.id }).where(eq(obligations.id, bill.id));
+  await postStatement(tx, {
+    sessionId: session.id, accountId: pocket.id, kind: 'bill', description: `${bill.description} · ref ${t.beneficiaryReference}`,
+    category: /tuition/i.test(bill.description) ? 'tuition' : /rent/i.test(bill.description) ? 'rent' : 'bills',
+    currency: t.fromCurrency, amountMinor: -debit, balanceAfterMinor: pocket.balanceMinor - debit,
+    counterparty: t.payee, proposalId: proposal.id,
+  });
 
   // "Sent" is what we know. The university confirming receipt is their fact.
   const outcome = {
@@ -477,6 +506,59 @@ async function executeBillPayment(
   await tx.update(actionProposals).set({ status: 'EXECUTED', decidedAt: now, resultJson: outcome }).where(eq(actionProposals.id, proposal.id));
   await appendAudit(tx, {
     sessionId: session.id, correlationId: proposal.id, type: 'bill.paid', actor: 'user', outcome: 'allowed',
+    payload: { proposalId: proposal.id, termsHash: proposal.termsHash, ...outcome },
+  });
+  return { replay: false, proposal: { ...proposal, status: 'EXECUTED', resultJson: outcome } };
+}
+
+/* ------------------------------------------------------------------- send */
+
+interface SendTermsLite {
+  sessionId: string; recipientId: string; recipientName: string; accountLabel: string;
+  receiveAmount: string; receiveCurrency: Currency; fromPocketId: string; fromCurrency: Currency; debitAmount: string;
+}
+
+/** Sends to a saved recipient inside the caller's transaction, re-checking the payee. */
+async function executeSend(tx: Db, session: ResolvedSession, proposal: typeof actionProposals.$inferSelect) {
+  const t = proposal.termsJson as SendTermsLite;
+  if (t.sessionId !== session.id) throw new AppError('NOT_FOUND', 'no such proposal');
+  const r = (await tx.select().from(recipients).where(eq(recipients.id, t.recipientId)).for('update'))[0];
+  if (!r || r.sessionId !== session.id || r.name !== t.recipientName || r.accountLabel !== t.accountLabel) {
+    throw new AppError('TERMS_CHANGED', 'the recipient changed since you approved');
+  }
+  const pocket = (await tx.select().from(accounts)
+    .where(and(eq(accounts.id, t.fromPocketId), eq(accounts.sessionId, session.id))).for('update'))[0];
+  if (!pocket) throw new AppError('NOT_FOUND', 'pocket not found');
+  const debit = parseAmount(t.debitAmount, t.fromCurrency);
+  const credit = parseAmount(t.receiveAmount, t.receiveCurrency);
+  if (debit > pocket.balanceMinor - pocket.reservedMinor) {
+    throw new AppError('INSUFFICIENT_FUNDS', 'your balance changed since this was quoted');
+  }
+  const after = pocket.balanceMinor - debit;
+  await tx.update(accounts).set({ balanceMinor: after, version: pocket.version + 1 }).where(eq(accounts.id, pocket.id));
+  await tx.insert(ledgerEntries).values(
+    t.fromCurrency === t.receiveCurrency
+      ? [
+          { proposalId: proposal.id, bucket: 'student_account', accountId: pocket.id, currency: t.fromCurrency, signedMinor: -debit },
+          { proposalId: proposal.id, bucket: 'beneficiary', currency: t.receiveCurrency, signedMinor: credit },
+        ]
+      : [
+          { proposalId: proposal.id, bucket: 'student_account', accountId: pocket.id, currency: t.fromCurrency, signedMinor: -debit },
+          { proposalId: proposal.id, bucket: 'fx_clearing', currency: t.fromCurrency, signedMinor: debit },
+          { proposalId: proposal.id, bucket: 'fx_clearing', currency: t.receiveCurrency, signedMinor: -credit },
+          { proposalId: proposal.id, bucket: 'beneficiary', currency: t.receiveCurrency, signedMinor: credit },
+        ],
+  );
+  await postStatement(tx, {
+    sessionId: session.id, accountId: pocket.id, kind: 'send', description: `To ${r.name} · ${r.accountLabel}`,
+    category: r.relationship === 'family' ? 'family' : 'other', currency: t.fromCurrency,
+    amountMinor: -debit, balanceAfterMinor: after, counterparty: r.name, proposalId: proposal.id,
+  });
+  const now = new Date();
+  const outcome = { sent: `${t.receiveAmount} ${t.receiveCurrency}`, to: r.name, debited: `${t.debitAmount} ${t.fromCurrency}`, status: 'SENT' };
+  await tx.update(actionProposals).set({ status: 'EXECUTED', decidedAt: now, resultJson: outcome }).where(eq(actionProposals.id, proposal.id));
+  await appendAudit(tx, {
+    sessionId: session.id, correlationId: proposal.id, type: 'transfer.sent', actor: 'user', outcome: 'allowed',
     payload: { proposalId: proposal.id, termsHash: proposal.termsHash, ...outcome },
   });
   return { replay: false, proposal: { ...proposal, status: 'EXECUTED', resultJson: outcome } };

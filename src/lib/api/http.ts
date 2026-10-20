@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { getDb } from '../db/client';
 import { AppError, isAppError } from '../services/errors';
+import { MoneyError } from '../domain/money';
 import { SESSION_COOKIE, resolveSession, type ResolvedSession } from '../services/workspace';
 
 export interface ErrorBody {
@@ -17,6 +18,11 @@ export interface ErrorBody {
 }
 
 export function fail(error: unknown, correlationId = randomUUID()): NextResponse {
+  // A malformed amount, rate or currency is the caller's mistake, not a server
+  // fault: report it as a validation error with the parser's own message.
+  if (error instanceof MoneyError) {
+    error = new AppError('VALIDATION_FAILED', error.message);
+  }
   if (isAppError(error)) {
     const body: ErrorBody = {
       code: error.code,

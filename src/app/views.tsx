@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ApprovalCard, CcyBadge, Icon, Sparkline, money, type Json } from './ui';
+import { TxRow } from './views2';
 
 export const CURRENCIES = ['GBP', 'USD', 'EUR', 'CNY', 'PKR', 'INR', 'AUD', 'CAD', 'JPY', 'KRW', 'AED'];
 
@@ -20,6 +21,7 @@ export interface Ctx {
   decline: (p: Json) => void;
   approving: string | null;
   go: (tab: string) => void;
+  sheet: (which: 'add' | 'pay') => void;
 }
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -112,7 +114,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 /* ------------------------------------------------------------------- home */
 
-export function Home({ data, ask, approve, decline, approving, go }: Ctx) {
+export function Home({ data, ask, approve, decline, approving, go, sheet }: Ctx) {
   const w = data.wallet;
   const pending = (data.proposals as Json[]).filter((p) => p.status === 'PENDING');
   const bills = (data.bills as Json[]).filter((b) => !b.paid).sort((a, b) => a.daysLeft - b.daysLeft);
@@ -126,9 +128,11 @@ export function Home({ data, ask, approve, decline, approving, go }: Ctx) {
           <div className="big num">{money(w.totalInDisplay, w.displayCurrency)}</div>
           <div className="sub">Indicative · live rates from {w.rates?.source ?? 'market data'}</div>
           <div className="actions">
-            <button className="btn ghost small" onClick={() => go('wallet')}><Icon name="swap" size={14} /> Convert</button>
-            <button className="btn ghost small" onClick={() => go('bills')}><Icon name="bill" size={14} /> Pay a bill</button>
+            <button className="btn ghost small" onClick={() => sheet('add')}><Icon name="down" size={14} /> Add money</button>
             <button className="btn ghost small" onClick={() => go('send')}><Icon name="send" size={14} /> Send</button>
+            <button className="btn ghost small" onClick={() => go('wallet')}><Icon name="swap" size={14} /> Convert</button>
+            <button className="btn ghost small" onClick={() => sheet('pay')}><Icon name="card" size={14} /> Pay</button>
+            <button className="btn ghost small" onClick={() => go('bills')}><Icon name="bill" size={14} /> Bills</button>
           </div>
         </section>
         <section className="card">
@@ -184,15 +188,9 @@ export function Home({ data, ask, approve, decline, approving, go }: Ctx) {
           ))}
         </section>
         <section className="card">
-          <div className="card-head"><h2>Recent activity</h2></div>
-          {(data.activity as Json[]).length === 0 && <p className="muted small">Nothing yet.</p>}
-          {(data.activity as Json[]).slice(0, 5).map((a) => (
-            <div key={a.id} className="list-row">
-              <span className="icon-tile"><Icon name={a.status === 'EXECUTED' ? 'check' : 'x'} /></span>
-              <div className="grow"><div className="title">{a.title}</div><div className="faint small">{new Date(a.at).toLocaleString()}</div></div>
-              <span className={`tag ${a.status === 'EXECUTED' ? 'ok' : ''}`}>{a.status === 'EXECUTED' ? 'done' : a.status.toLowerCase()}</span>
-            </div>
-          ))}
+          <div className="card-head"><h2>Recent transactions</h2><button className="btn secondary small" onClick={() => go('activity')}>See all</button></div>
+          {(data.transactions as Json[]).length === 0 && <p className="muted small">Nothing yet.</p>}
+          {(data.transactions as Json[]).slice(0, 6).map((t) => <TxRow key={t.id} t={t} />)}
         </section>
       </div>
     </>
@@ -201,7 +199,7 @@ export function Home({ data, ask, approve, decline, approving, go }: Ctx) {
 
 /* ----------------------------------------------------------------- wallet */
 
-export function Wallet({ data, refresh, approve, decline, approving }: Ctx) {
+export function Wallet({ data, refresh, approve, decline, approving, sheet, go }: Ctx) {
   const w = data.wallet;
   const { home, study } = data.profile;
   const [form, setForm] = useState({ from: home, to: study, sellAmount: '' });
@@ -222,6 +220,12 @@ export function Wallet({ data, refresh, approve, decline, approving }: Ctx) {
 
   return (
     <>
+      <div className="actions">
+        <button className="btn" onClick={() => sheet('add')}><Icon name="down" size={15} /> Add money</button>
+        <button className="btn secondary" onClick={() => sheet('pay')}><Icon name="card" size={15} /> Pay</button>
+        <button className="btn secondary" onClick={() => go('send')}><Icon name="send" size={15} /> Send</button>
+        <button className="btn secondary" onClick={() => go('activity')}><Icon name="clock" size={15} /> Statement</button>
+      </div>
       <div className="grid-3">
         {(w.pockets as Json[]).map((p) => (
           <div key={p.id} className="pocket">

@@ -410,3 +410,33 @@ export const budgets = pgTable('budgets', {
   monthlyLimitMinor: minor('monthly_limit_minor').notNull(),
   spentMinor: minor('spent_minor').notNull().default(sql`0`),
 }, (t) => [uniqueIndex('budgets_session_category_key').on(t.sessionId, t.category)]);
+
+/* ------------------------------------------------------------- statement */
+
+/** One movement on a pocket, as the student reads it. Written with the ledger. */
+export const walletTransactions = pgTable('wallet_transactions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(), // topup | convert_out | convert_in | bill | send | spend | opening
+  description: text('description').notNull(),
+  category: text('category').notNull().default('other'),
+  currency: text('currency').notNull(),
+  amountMinor: minor('amount_minor').notNull(),
+  balanceAfterMinor: minor('balance_after_minor').notNull(),
+  counterparty: text('counterparty'),
+  proposalId: uuid('proposal_id'),
+  idempotencyKey: text('idempotency_key'),
+  createdAt: instant('created_at').notNull().defaultNow(),
+}, (t) => [index('wtx_session_time_idx').on(t.sessionId, t.createdAt)]);
+
+export const recipients = pgTable('recipients', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  relationship: text('relationship').notNull().default('other'),
+  country: text('country').notNull(),
+  currency: text('currency').notNull(),
+  accountLabel: text('account_label').notNull(),
+  createdAt: instant('created_at').notNull().defaultNow(),
+});

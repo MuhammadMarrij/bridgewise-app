@@ -7,6 +7,7 @@ import { profileOf } from '@/lib/agent/bank-tools';
 import { actionProposals, obligations, rateAlerts } from '@/lib/db/schema';
 import { formatAmount, type Currency } from '@/lib/domain/money';
 import { insightsFor } from '@/lib/services/insights';
+import { listTransactions } from '@/lib/services/money-ops';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
       profile: { home, study },
       wallet,
       insights,
+      transactions: await listTransactions(db, session.id, { limit: 12 }),
       bills: bills.map((b) => ({
         id: b.id,
         description: b.description,

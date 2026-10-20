@@ -115,6 +115,56 @@ export function bankGuidedAdapter(): ModelAdapter {
         return say(`Ready to pay ${unpaid.description} (${unpaid.amount} ${unpaid.currency}, due in ${unpaid.daysLeft} days): it costs ${p.costs}, leaving ${p.leftInPocketAfter}. Approve the card to send it.`);
       }
 
+      // "Set a food budget of 200", "budget 150 for transport".
+      const CATS = ['tuition', 'rent', 'food', 'transport', 'bills', 'shopping', 'family', 'other'];
+      const catWord = CATS.find((c) => t.includes(c)) ?? (/grocer|eat|restaurant/.test(t) ? 'food' : /bus|train|uber|travel/.test(t) ? 'transport' : null);
+      if (/\bbudget\b/.test(t) && amount && catWord && /\b(set|make|create|limit|change)\b/.test(t)) {
+        if (!got.has('set_budget')) return use(call('set_budget', { category: catWord, monthlyLimit: amount }));
+        const b = got.get('set_budget')!;
+        if (b.error) return say(`I couldn't set that budget: ${b.message}.`);
+        const mine = (b.budgets as Json[]).find((x) => x.category === catWord);
+        return say(`Done — your ${catWord} budget is ${mine?.limit} ${mine?.currency} a month. You've spent ${mine?.spent} so far this month, ${mine?.remaining} left.`);
+      }
+
+      // "How much did I spend", "where is my money going", "how long will my money last".
+      if (/\b(spend|spent|spending|budget|runway|last me|how long|afford|where.*money)\b/.test(t)) {
+        if (!got.has('get_spending')) return use(call('get_spending', { days: 30 }));
+        const s = got.get('get_spending')!;
+        if (s.error) return say(`I couldn't analyse your spending: ${s.message}.`);
+        if (!s.transactions) return say('No spending recorded in the last 30 days yet. Pay for something from a pocket or set a budget and I can track it.');
+        const top = (s.categories as Json[]).slice(0, 3).map((c) => `${c.category} ${c.amount} (${c.share}%)`).join(', ');
+        const over = (s.budgets as Json[]).filter((b) => b.over).map((b) => b.category);
+        return say(
+          `In the last 30 days you spent ${s.total} ${s.display}: ${top}. That's about ${s.averageDaily} ${s.display} a day` +
+            (s.runwayDays !== null ? `, so your wallet lasts roughly ${s.runwayDays} days at this rate (excluding tuition).` : '.') +
+            (over.length ? ` You're over budget on ${over.join(' and ')}.` : ''),
+        );
+      }
+
+      // "What did I pay", "show my transactions", "recent activity".
+      if (/\b(transactions?|statement|recent|history of payments|what did i (pay|buy))\b/.test(t)) {
+        if (!got.has('get_transactions')) return use(call('get_transactions', { limit: 8, ...(cur[0] ? { currency: cur[0] } : {}) }));
+        const tx = (got.get('get_transactions')!.transactions as Json[]) ?? [];
+        if (!tx.length) return say('No transactions yet.');
+        return say('Your latest:\n' + tx.slice(0, 8).map((x) => `• ${x.description} — ${x.amount} ${x.currency} (balance ${x.balanceAfter})`).join('\n'));
+      }
+
+      // "Send 2000 CNY to Mum" — a person, not a provider comparison.
+      const toWho = user.match(/\bto\s+(?:my\s+)?([A-Za-z][A-Za-z'\-]{1,30})/i)?.[1];
+      if (/\b(send|transfer|pay)\b/.test(t) && toWho && !/cheapest|compare|provider|tuition|university|college/.test(t)) {
+        if (!got.has('list_recipients')) return use(call('list_recipients'));
+        const list = (got.get('list_recipients')!.recipients as Json[]) ?? [];
+        const r = list.find((x) => String(x.name).toLowerCase().includes(toWho.toLowerCase()) || String(x.relationship).toLowerCase() === toWho.toLowerCase());
+        if (!r) return say(`I don't have ${toWho} as a recipient, and I can't add one for you — that's deliberate, so nobody can trick me into paying a new account. Add them in Send, then ask me again.`);
+        if (!amount) return say(`How much should ${r.name} receive, in ${r.currency}?`);
+        if (!got.has('propose_transfer')) {
+          return use(call('propose_transfer', { recipientId: r.id, receiveAmount: amount, ...(cur.find((c) => c !== r.currency) ? { fromCurrency: cur.find((c) => c !== r.currency) } : {}) }));
+        }
+        const p = got.get('propose_transfer')!;
+        if (p.error) return say(`I couldn't prepare that: ${p.message}.`);
+        return say(`Ready: ${p.to} receives ${p.theyReceive}; you pay ${p.youPay}${p.rate ? ` at ${p.rate} (mid ${p.midMarketRate})` : ''}, leaving ${p.leftInPocketAfter}. Approve the card to send it.`);
+      }
+
       // "Convert 5000 CNY to GBP", "change 2k yuan into pounds".
       if (/\b(convert|change|exchange|swap|move)\b/.test(t) && amount) {
         if (!got.has('propose_conversion')) {

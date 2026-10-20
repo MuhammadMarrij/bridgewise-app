@@ -42,7 +42,8 @@ test('the assistant reads an invoice, prepares a payment, and nothing moves unti
 
   await approve.click();
   await expect(page.getByText(/King's College London — done/)).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('120,000.00')).toHaveCount(0);
+  // The payment is on the statement, tagged with its reference.
+  await expect(page.getByText(/Tuition · ref K2104471/)).toBeVisible();
 });
 
 test('a conversion is quoted with its fee before anything is approved', async ({ page }) => {
@@ -79,4 +80,50 @@ test('every control on Home has an accessible name', async ({ page }) => {
       .map((el) => el.outerHTML.slice(0, 80)),
   );
   expect(unnamed).toEqual([]);
+});
+
+test('add money, pay for something, and see both on the statement with running balances', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Wallet' }).first().click();
+  await page.getByRole('button', { name: 'Add money' }).first().click();
+  const add = page.getByRole('dialog');
+  await add.getByLabel('Amount').fill('250.00');
+  await add.getByLabel('Currency').selectOption('GBP');
+  await page.getByRole('dialog').getByRole('button', { name: 'Add money' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Pay' }).first().click();
+  const pay = page.getByRole('dialog');
+  await pay.getByLabel('Where').fill('Tesco');
+  await pay.getByLabel('Amount').fill('40.00');
+  await pay.getByLabel('Pocket').selectOption('GBP');
+  await page.getByRole('dialog').getByRole('button', { name: 'Pay' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Activity' }).first().click();
+  // 900 + 250 = 1150, then 1150 - 40 = 1110.
+  await expect(page.getByText('bal 1,150.00')).toBeVisible();
+  await expect(page.getByText('bal 1,110.00')).toBeVisible();
+});
+
+test('a new recipient is saved by the student and paid only after approval', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Send' }).first().click();
+  await page.getByRole('button', { name: 'New recipient' }).click();
+  await page.getByLabel('Name').fill('Mum');
+  await page.getByLabel('Account').fill('Alipay 4471');
+  await page.getByRole('button', { name: 'Save recipient' }).click();
+  await page.getByLabel(/They receive/).fill('500.00');
+  await page.getByRole('button', { name: 'Get quote' }).click();
+  await expect(page.getByText('Send 500.00 CNY to Mum')).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Approve' }).first().click();
+  await expect(page.getByText('Sent 500.00 CNY to Mum.')).toBeVisible({ timeout: 15_000 });
+});
+
+test('a budget shows spending against its limit', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Budget' }).first().click();
+  await page.getByLabel(/Monthly limit/).fill('100');
+  await page.getByRole('button', { name: 'Set budget' }).click();
+  await expect(page.getByText(/0\.00 \/ 100\.00 GBP/)).toBeVisible();
 });

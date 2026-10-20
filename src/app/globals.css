@@ -264,3 +264,30 @@ caption { text-align: left; caption-side: bottom; padding-top: .6rem; font-size:
   .terms dd { margin-bottom: .3rem; }
 }
 .assistant-close { display: none !important; }
+
+/* Donut, sheet, statement ---------------------------------------------------- */
+.donut { display: grid; grid-template-columns: 160px 1fr; gap: 1.25rem; align-items: center; position: relative; }
+.donut-center { position: absolute; left: 0; top: 0; width: 160px; height: 160px; display: grid; place-items: center; text-align: center; pointer-events: none; }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; font-size: .88rem; }
+.legend li { display: flex; align-items: center; gap: .5rem; text-transform: capitalize; }
+.legend .num { margin-left: auto; color: var(--muted); }
+.legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+.sheet-backdrop { position: fixed; inset: 0; background: rgba(5,10,20,.45); z-index: 60; display: grid; place-items: center; padding: 1rem; }
+.sheet { width: min(480px, 100%); max-height: 90vh; overflow: auto; }
+.tx { display: grid; grid-template-columns: 36px 1fr auto; gap: .8rem; align-items: center; padding: .65rem 0; border-top: 1px solid var(--line); }
+.tx:first-child { border-top: 0; }
+.tx .emoji { width: 36px; height: 36px; border-radius: 10px; background: var(--surface-2); display: grid; place-items: center; font-size: 1rem; }
+.tx .amt { text-align: right; font-variant-numeric: tabular-nums; font-weight: 640; }
+.tx .amt.in { color: var(--ok); }
+.tx .bal { font-size: .76rem; color: var(--faint); font-weight: 400; }
+.bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--line); }
+.bar > span { display: block; height: 100%; background: var(--brand); }
+.bar.over > span { background: var(--bad); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { all: unset; cursor: pointer; padding: .4rem .75rem; font-size: .84rem; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--brand-soft); color: var(--brand); font-weight: 650; }
+.seg button:focus-visible { outline: 3px solid var(--brand); }
+.stat { display: flex; flex-direction: column; gap: .15rem; }
+.stat .k { font-size: .8rem; color: var(--muted); }
+.stat .v { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 860px) { .donut { grid-template-columns: 1fr; justify-items: center; } .donut-center { left: 50%; transform: translateX(-50%); } }

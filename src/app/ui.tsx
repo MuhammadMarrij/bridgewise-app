@@ -90,6 +90,15 @@ export function ApprovalCard({
           ['Mid-market (ECB)', `${t.midRate}`],
           ['Our fee', `${money(t.marginCostInTarget, t.to)} · ${Number(t.marginBps) / 100}%`],
         ]
+      : p.kind === 'send'
+      ? ([
+          ['They receive', <strong key="r">{money(t.receiveAmount, t.receiveCurrency)}</strong>],
+          ['To', `${t.recipientName} · ${t.accountLabel}`],
+          ['You pay', money(t.debitAmount, t.fromCurrency)],
+          ...(t.customerRate ? ([['Rate', `${t.customerRate} (mid ${t.midRate})`]] as Array<[string, ReactNode]>) : []),
+          ['Fee', money(t.feeAmount, t.fromCurrency)],
+          ['Left in pocket', money(t.leftInPocketAfter, t.fromCurrency)],
+        ] as Array<[string, ReactNode]>)
       : [
           ['Pay', <strong key="p">{money(t.billAmount, t.billCurrency)}</strong>],
           ['To', t.payee],
@@ -104,7 +113,7 @@ export function ApprovalCard({
   return (
     <div className={`approval ${done ? 'done' : ''} ${closed ? 'closed' : ''}`}>
       <div className="approval-head">
-        <Icon name={done ? 'check' : p.kind === 'convert' ? 'swap' : 'bill'} />
+        <Icon name={done ? 'check' : p.kind === 'convert' ? 'swap' : p.kind === 'send' ? 'send' : 'bill'} />
         <h3 className="grow" style={{ flex: 1 }}>{p.title}</h3>
         {done ? <span className="tag ok">Done</span>
           : closed ? <span className="tag">{status.toLowerCase()}</span>
@@ -120,6 +129,8 @@ export function ApprovalCard({
           <p className="small" style={{ color: 'var(--ok)' }}>
             {p.kind === 'pay_bill'
               ? `Sent ${p.result.paid} to ${p.result.to}. The university confirms receipt on their side.`
+              : p.kind === 'send'
+              ? `Sent ${p.result.sent} to ${p.result.to}.`
               : `Converted: ${p.result.sold} → ${p.result.bought}.`}
           </p>
         )}
@@ -178,6 +189,11 @@ const STEP_LABEL: Record<string, string> = {
   propose_bill_payment: 'prepared payment',
   propose_conversion: 'prepared conversion',
   set_rate_alert: 'set an alert',
+  get_transactions: 'read your statement',
+  get_spending: 'analysed your spending',
+  list_recipients: 'checked your recipients',
+  propose_transfer: 'prepared transfer',
+  set_budget: 'set a budget',
 };
 
 export function Assistant({
@@ -260,3 +276,57 @@ export function Assistant({
     </aside>
   );
 }
+
+/* -------------------------------------------------------------------- donut */
+
+const DONUT = ['#0b5cff', '#7c4dff', '#0e8a5f', '#e07b00', '#d23b3b', '#00a3bf', '#8a94a6', '#c2185b'];
+
+export function Donut({ items, center }: { items: Array<{ label: string; value: number }>; center: ReactNode }) {
+  const total = items.reduce((a, b) => a + b.value, 0) || 1;
+  let acc = 0;
+  const r = 52, c = 2 * Math.PI * r;
+  return (
+    <div className="donut">
+      <svg viewBox="0 0 140 140" width="160" height="160" role="img" aria-label="Spending by category">
+        <circle cx="70" cy="70" r={r} fill="none" stroke="var(--line)" strokeWidth="18" />
+        {items.map((it, i) => {
+          const len = (it.value / total) * c;
+          const el = (
+            <circle key={it.label} cx="70" cy="70" r={r} fill="none" stroke={DONUT[i % DONUT.length]} strokeWidth="18"
+              strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-acc} transform="rotate(-90 70 70)" />
+          );
+          acc += len;
+          return el;
+        })}
+      </svg>
+      <div className="donut-center">{center}</div>
+      <ul className="legend">
+        {items.map((it, i) => (
+          <li key={it.label}><span className="sw" style={{ background: DONUT[i % DONUT.length] }} />{it.label}<span className="num">{Math.round((it.value / total) * 100)}%</span></li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------- sheet */
+
+export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet card" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+        <div className="card-head"><h2>{title}</h2><button className="btn secondary small" onClick={onClose} aria-label="Close"><Icon name="x" size={14} /></button></div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export const CATEGORY_ICON: Record<string, string> = {
+  tuition: '🎓', rent: '🏠', food: '🍜', transport: '🚇', bills: '🧾', shopping: '🛍️', family: '👪', fx: '💱', income: '⬇️', other: '•',
+};

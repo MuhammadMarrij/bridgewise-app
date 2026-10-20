@@ -397,3 +397,44 @@ describe('wallet and proposals over HTTP', () => {
     expect(wallet.body.activity).toHaveLength(0);
   });
 });
+
+describe('wallet operations over HTTP', () => {
+  it('cannot read another student statement, recipients or budgets', async () => {
+    const mine = await newStudent();
+    await call('/api/recipients', { method: 'POST', cookie: mine, body: JSON.stringify({ name: 'Mum', relationship: 'family', country: 'CN', currency: 'CNY', accountLabel: 'Alipay 4471' }) });
+    const theirs = await newStudent();
+    expect((await call('/api/recipients', { cookie: theirs })).body.recipients).toHaveLength(0);
+    const tx = (await call('/api/transactions', { cookie: theirs })).body.transactions;
+    expect(tx.every((t: any) => t.description === 'Opening balance')).toBe(true);
+  });
+
+  it('cannot send to another student recipient', async () => {
+    const mine = await newStudent();
+    const r = await call('/api/recipients', { method: 'POST', cookie: mine, body: JSON.stringify({ name: 'Mum', relationship: 'family', country: 'CN', currency: 'CNY', accountLabel: 'Alipay 4471' }) });
+    const theirs = await newStudent();
+    const res = await call('/api/send', { method: 'POST', cookie: theirs, body: JSON.stringify({ recipientId: r.body.recipient.id, receiveAmount: '10.00' }) });
+    expect(res.status).toBe(404);
+  });
+
+  it('a replayed payment with the same key is charged once', async () => {
+    const mine = await newStudent();
+    const body = JSON.stringify({ currency: 'GBP', amount: '10.00', merchant: 'Pret', category: 'food', idempotencyKey: 'replay-key-1' });
+    await Promise.all([1, 2, 3].map(() => call('/api/spend', { method: 'POST', cookie: mine, body })));
+    const w = await call('/api/wallet', { cookie: mine });
+    expect(w.body.wallet.pockets.find((p: any) => p.currency === 'GBP').balance).toBe('490.00');
+  });
+
+  it('refuses an overdraft, a negative amount, and an unknown category', async () => {
+    const mine = await newStudent();
+    const spend = (b: object) => call('/api/spend', { method: 'POST', cookie: mine, body: JSON.stringify({ currency: 'GBP', merchant: 'X', category: 'food', idempotencyKey: `k-${Math.random()}`, ...b }) });
+    expect((await spend({ amount: '9999.00' })).status).toBe(409);
+    expect((await spend({ amount: '-5.00' })).status).toBe(422);
+    expect((await spend({ amount: '5.00', category: 'casino' })).status).toBe(422);
+  });
+
+  it('refuses a cross-origin top-up', async () => {
+    const mine = await newStudent();
+    const res = await call('/api/topup', { method: 'POST', cookie: mine, origin: 'https://evil.example', body: JSON.stringify({ currency: 'GBP', amount: '100.00', source: 'x', idempotencyKey: 'evil-topup-1' }) });
+    expect(res.status).toBe(422);
+  });
+});

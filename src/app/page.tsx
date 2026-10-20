@@ -10,21 +10,26 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Assistant, Icon, type ChatMsg, type Json } from './ui';
-import { Bills, Home, Markets, Onboarding, Send, Wallet, api, type Ctx } from './views';
+import { Bills, Home, Markets, Onboarding, Wallet, api, type Ctx } from './views';
+import { Activity, AddMoney, Budget, RecordPayment, SendMoney } from './views2';
 
 const TABS = [
-  { id: 'home', label: 'Home', icon: 'home' },
-  { id: 'wallet', label: 'Wallet', icon: 'wallet' },
-  { id: 'bills', label: 'Bills', icon: 'bill' },
-  { id: 'send', label: 'Send', icon: 'send' },
-  { id: 'markets', label: 'Markets', icon: 'chart' },
+  { id: 'home', label: 'Home', icon: 'home', mobile: true },
+  { id: 'wallet', label: 'Wallet', icon: 'wallet', mobile: true },
+  { id: 'activity', label: 'Activity', icon: 'clock', mobile: true },
+  { id: 'send', label: 'Send', icon: 'send', mobile: true },
+  { id: 'budget', label: 'Budget', icon: 'chart', mobile: true },
+  { id: 'bills', label: 'Bills', icon: 'bill', mobile: false },
+  { id: 'markets', label: 'Markets', icon: 'up', mobile: false },
 ] as const;
 
 const TITLES: Record<string, [string, string]> = {
   home: ['', 'Here is where your money stands today.'],
   wallet: ['Wallet', 'One pocket per currency, valued at live rates.'],
   bills: ['Bills', 'Tuition and fees — read from your invoice, paid on your approval.'],
-  send: ['Send money', 'What real banks and providers would charge you today.'],
+  send: ['Send money', 'To family, friends and landlords — and what the market would charge you.'],
+  activity: ['Activity', 'Every movement on every pocket, with the balance after it.'],
+  budget: ['Budget', 'Where your money goes, and how long it will last.'],
   markets: ['Markets', 'The exchange rates that matter to you.'],
 };
 
@@ -38,6 +43,7 @@ export default function App() {
   const [panel, setPanel] = useState(false);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [name, setName] = useState('there');
+  const [sheet, setSheet] = useState<'add' | 'pay' | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -95,7 +101,7 @@ export default function App() {
     return <main id="main"><Onboarding onDone={() => { try { setName(localStorage.getItem('bw-name') ?? 'there'); } catch { /* */ } refresh(); }} /></main>;
   }
 
-  const ctx: Ctx = { data: data!, refresh, ask, approve, decline, approving, go: setTab };
+  const ctx: Ctx = { data: data!, refresh, ask, approve, decline, approving, go: setTab, sheet: setSheet };
   const [title, sub] = TITLES[tab]!;
   const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; })();
 
@@ -132,7 +138,9 @@ export default function App() {
           {tab === 'home' && <Home {...ctx} />}
           {tab === 'wallet' && <Wallet {...ctx} />}
           {tab === 'bills' && <Bills {...ctx} />}
-          {tab === 'send' && <Send {...ctx} />}
+          {tab === 'send' && <SendMoney {...ctx} />}
+          {tab === 'activity' && <Activity {...ctx} />}
+          {tab === 'budget' && <Budget {...ctx} />}
           {tab === 'markets' && <Markets {...ctx} />}
         </div>
       </main>
@@ -145,8 +153,11 @@ export default function App() {
 
       <button className="btn fab" onClick={() => setPanel(true)}><Icon name="spark" /> Assistant</button>
 
+      {sheet === 'add' && <AddMoney ctx={ctx} onClose={() => setSheet(null)} />}
+      {sheet === 'pay' && <RecordPayment ctx={ctx} onClose={() => setSheet(null)} />}
+
       <nav className="tabbar" aria-label="Main">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.mobile).map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}>
             <Icon name={t.icon} size={20} /> {t.label}
           </button>
