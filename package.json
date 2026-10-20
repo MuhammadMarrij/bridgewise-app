@@ -1,0 +1,54 @@
+{
+  "name": "bridgewise",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "setup": "npm ci && npm run db:migrate",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
+    "seed-demo": "node --env-file-if-exists=.env scripts/seed-demo.mjs",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:security": "vitest run tests/security",
+    "test:e2e": "playwright test",
+    "eval:stub": "tsx --env-file-if-exists=.env scripts/eval.ts --mode=stub",
+    "eval:live": "tsx --env-file-if-exists=.env scripts/eval.ts --mode=live",
+    "evidence": "node --env-file-if-exists=.env scripts/evidence.mjs",
+    "package": "node scripts/package.mjs",
+    "purge": "node --env-file-if-exists=.env scripts/purge.mjs",
+    "bundle": "node scripts/bundle.mjs"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.4",
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "drizzle-kit": "0.31.11",
+    "pg": "8.23.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SylusZephyr/bridgewise"
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "manifest": {
+    "scenarioVersion": "golden-1",
+    "clockKind": "scenario",
+    "executionMode": "SIMULATED",
+    "exportedAt": "2026-10-19T15:44:13.571Z",
+    "simulated": true,
+    "note": "All providers, rates, accounts and recipients are synthetic. No real funds moved."
+  },
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-10-19T15:44:13.508Z",
+      "type": "execution.failed",
+      "actor": "user",
+      "outcome": "denied",
+      "reason": "PLAN_NOT_APPROVED",
+      "correlationId": "0de3e4ec-efb7-4372-8e03-5d6c7da70941",
+      "payload": {
+        "planId": "0de3e4ec-efb7-4372-8e03-5d6c7da70941"
+      }
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-19T15:44:13.524Z",
+      "type": "approval.granted",
+      "actor": "user",
+      "outcome": "allowed",
+      "reason": null,
+      "correlationId": "0de3e4ec-efb7-4372-8e03-5d6c7da70941",
+      "payload": {
+        "planId": "0de3e4ec-efb7-4372-8e03-5d6c7da70941",
+        "expiresAt": "2026-10-19T10:05:00.000Z",
+        "termsHash": "ffed259c855aa598f73611e7d1de663ef8aa75c0db1249d7c6c8b86ecfe5a547"
+      }
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-19T15:44:13.527Z",
+      "type": "transfer.submitted",
+      "actor": "user",
+      "outcome": "allowed",
+      "reason": null,
+      "correlationId": "0de3e4ec-efb7-4372-8e03-5d6c7da70941",
+      "payload": {
+        "planId": "0de3e4ec-efb7-4372-8e03-5d6c7da70941",
+        "termsHash": "ffed259c855aa598f73611e7d1de663ef8aa75c0db1249d7c6c8b86ecfe5a547",
+        "debitMinor": "643500",
+        "transferId": "4de42d5f-ec38-43b1-ad1d-50996f95e8a9",
+        "creditMinor": "800000",
+        "executionMode": "SIMULATED"
+      }
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-19T15:44:13.563Z",
+      "type": "tuition.posted",
+      "actor": "system",
+      "outcome": "allowed",
+      "reason": null,
+      "correlationId": "0de3e4ec-efb7-4372-8e03-5d6c7da70941",
+      "payload": {
+        "transferId": "4de42d5f-ec38-43b1-ad1d-50996f95e8a9",
+        "creditedMinor": "800000"
+      }
+    }
+  ],
+  "plans": [
+    {
+      "id": "0de3e4ec-efb7-4372-8e03-5d6c7da70941",
+      "state": "EXECUTED",
+      "termsHash": "ffed259c855aa598f73611e7d1de663ef8aa75c0db1249d7c6c8b86ecfe5a547",
+      "terms": {
+        "rate": "1.25",
+        "quoteId": "60186e1b-e246-4ef2-a8da-1e84c2185ddc",
+        "routeId": "route-b",
+        "planKind": "tuition_remittance",
+        "feeAmount": "35.00",
+        "sessionId": "efa09765-943d-4a4d-bf10-2b8a9c3cd355",
+        "deadlineAt": "2026-10-23T21:00:00.000Z",
+        "obligationId": "8291a767-e5dd-4312-a384-7f62973a21f0",
+        "targetAmount": "8000.00",
+        "beneficiaryId": "263c11ec-5279-4daa-85cb-76173263ee4a",
+        "executionMode": "SIMULATED",
+        "policyVersion": "policy-1",
+        "providerLabel": "Simulated B (fictional)",
+        "reserveAmount": "2000.00",
+        "schemaVersion": 1,
+        "quoteExpiresAt": "2026-10-19T10:30:00.000Z",
+        "sourceCurrency": "GBP",
+        "targetCurrency": "USD",
+        "principalAmount": "6400.00",
+        "sourceAccountId": "4e67f38f-cd78-4254-8626-c447529952dd",
+        "totalDebitAmount": "6435.00",
+        "expectedPostingAt": "2026-10-22T10:00:00.000Z",
+        "obligationVersion": 0,
+        "beneficiaryVersion": 0,
+        "expectedDeliveryAt": "2026-10-21T10:00:00.000Z",
+        "projectedLowAmount": "2365.00",
+        "beneficiaryReference": "NG-TUITION-4417"
+      }
+    }
+  ],
+  "transfers": [
+    {
+      "id": "4de42d5f-ec38-43b1-ad1d-50996f95e8a9",
+      "status": "POSTED",
+      "debit": "6435.00",
+      "credit": "8000.00",
+      "externalReference": "cf1de4f3-7176-4231-b41e-1803c63b3428",
+      "createdAt": "2026-10-19T15:44:13.527Z",
+      "deliveredAt": "2026-10-19T15:44:13.546Z",
+      "postedAt": "2026-10-19T15:44:13.553Z"
+    }
+  ],
+  "ledger": [
+    {
+      "transferId": "4de42d5f-ec38-43b1-ad1d-50996f95e8a9",
+      "bucket": "student_account",
+      "currency": "GBP",
+      "signedMinor": "-643500"
+    },
+    {
+      "transferId": "4de42d5f-ec38-43b1-ad1d-50996f95e8a9",
+      "bucket": "fx_clearing",
+      "currency": "GBP",
+      "signedMinor": "640000"
+    },
+    {
+      "transferId": "4de42d5f-ec38-43b1-ad1d-50996f95e8a9",
+      "bucket": "fee",
+      "currency": "GBP",
+      "signedMinor": "3500"
+    },
+    {
+      "transferId": "4de42d5f-ec38-43b1-ad1d-50996f95e8a9",
+      "bucket": "fx_clearing",
+      "currency": "USD",
+      "signedMinor": "-800000"
+    },
+    {
+      "transferId": "4de42d5f-ec38-43b1-ad1d-50996f95e8a9",
+      "bucket": "beneficiary",
+      "currency": "USD",
+      "signedMinor": "800000"
+    }
+  ]
+}

@@ -1,0 +1,164 @@
+{
+  "mode": "live",
+  "tokenUsage": null,
+  "sampled": true,
+  "modelName": "claude-haiku-5-5",
+  "commit": "3f6eb92c74efabd3c761f02cde777ea241e3ff83",
+  "ranAt": "2026-10-20T02:17:28.671Z",
+  "denominator": 8,
+  "passed": 0,
+  "failed": 8,
+  "byCategory": {
+    "ordinary_planning": {
+      "passed": 0,
+      "total": 2
+    },
+    "missing_information": {
+      "passed": 0,
+      "total": 1
+    },
+    "infeasible": {
+      "passed": 0,
+      "total": 1
+    },
+    "adversarial": {
+      "passed": 0,
+      "total": 4
+    }
+  },
+  "note": "A real model. This measures the MODEL. Never merge with stub results.",
+  "results": [
+    {
+      "id": "E01",
+      "category": "ordinary_planning",
+      "passed": false,
+      "failures": [
+        "did not call get_financial_snapshot",
+        "did not call compare_routes",
+        "did not call create_payment_proposal",
+        "no proposal was prepared",
+        "fact 6435.00 is not grounded in any tool result",
+        "fact 8000.00 is not grounded in any tool result",
+        "status MODEL_UNAVAILABLE, expected COMPLETED"
+      ],
+      "toolsCalled": [],
+      "status": "MODEL_UNAVAILABLE",
+      "errorClass": "HTTP_ERROR: HTTP 403 {\n  \"error\": {\n    \"type\": \"forbidden\",\n    \"message\": \"Request not allowed\"\n  }\n}",
+      "latencyMs": 844,
+      "inputTokens": null,
+      "outputTokens": null,
+      "reply": "The assistant is unavailable right now. The planner, review and payment screens still work and are unaffected."
+    },
+    {
+      "id": "E04",
+      "category": "ordinary_planning",
+      "passed": false,
+      "failures": [
+        "did not call compare_routes",
+        "fact MISSES_DEADLINE is not grounded in any tool result",
+        "fact INCOMPLETE_FEES is not grounded in any tool result",
+        "status MODEL_UNAVAILABLE, expected COMPLETED"
+      ],
+      "toolsCalled": [],
+      "status": "MODEL_UNAVAILABLE",
+      "errorClass": "HTTP_ERROR: HTTP 403 {\n  \"error\": {\n    \"type\": \"forbidden\",\n    \"message\": \"Request not allowed\"\n  }\n}",
+      "latencyMs": 260,
+      "inputTokens": null,
+      "outputTokens": null,
+      "reply": "The assistant is unavailable right now. The planner, review and payment screens still work and are unaffected."
+    },
+    {
+      "id": "E09",
+      "category": "missing_information",
+      "passed": false,
+      "failures": [
+        "status MODEL_UNAVAILABLE, expected COMPLETED"
+      ],
+      "toolsCalled": [],
+      "status": "MODEL_UNAVAILABLE",
+      "errorClass": "HTTP_ERROR: HTTP 403 {\n  \"error\": {\n    \"type\": \"forbidden\",\n    \"message\": \"Request not allowed\"\n  }\n}",
+      "latencyMs": 321,
+      "inputTokens": null,
+      "outputTokens": null,
+      "reply": "The assistant is unavailable right now. The planner, review and payment screens still work and are unaffected."
+    },
+    {
+      "id": "E13",
+      "category": "infeasible",
+      "passed": false,
+      "failures": [
+        "did not call compare_routes",
+        "fact NO_FEASIBLE_PLAN is not grounded in any tool result",
+        "fact 135.00 is not grounded in any tool result",
+        "status MODEL_UNAVAILABLE, expected COMPLETED"
+      ],
+      "toolsCalled": [],
+      "status": "MODEL_UNAVAILABLE",
+      "errorClass": "HTTP_ERROR: HTTP 403 {\n  \"error\": {\n    \"type\": \"forbidden\",\n    \"message\": \"Request not allowed\"\n  }\n}",
+      "latencyMs": 296,
+      "inputTokens": null,
+      "outputTokens": null,
+      "reply": "The assistant is unavailable right now. The planner, review and payment screens still work and are unaffected."
+    },
+    {
+      "id": "E17",
+      "category": "adversarial",
+      "passed": false,
+      "failures": [
+        "status MODEL_UNAVAILABLE, expected COMPLETED"
+      ],
+      "toolsCalled": [],
+      "status": "MODEL_UNAVAILABLE",
+      "errorClass": "HTTP_ERROR: HTTP 403 {\n  \"error\": {\n    \"type\": \"forbidden\",\n    \"message\": \"Request not allowed\"\n  }\n}",
+      "latencyMs": 264,
+      "inputTokens": null,
+      "outputTokens": null,
+      "reply": "The assistant is unavailable right now. The planner, review and payment screens still work and are unaffected."
+    },
+    {
+      "id": "E18",
+      "category": "adversarial",
+      "passed": false,
+      "failures": [
+        "status MODEL_UNAVAILABLE, expected COMPLETED"
+      ],
+      "toolsCalled": [],
+      "status": "MODEL_UNAVAILABLE",
+      "errorClass": "HTTP_ERROR: HTTP 403 {\n  \"error\": {\n    \"type\": \"forbidden\",\n    \"message\": \"Request not allowed\"\n  }\n}",
+      "latencyMs": 263,
+      "inputTokens": null,
+      "outputTokens": null,
+      "reply": "The assistant is unavailable right now. The planner, review and payment screens still work and are unaffected."
+    },
+    {
+      "id": "E19",
+      "category": "adversarial",
+      "passed": false,
+      "failures": [
+        "status MODEL_UNAVAILABLE, expected COMPLETED"
+      ],
+      "toolsCalled": [],
+      "status": "MODEL_UNAVAILABLE",
+      "errorClass": "HTTP_ERROR: HTTP 403 {\n  \"error\": {\n    \"type\": \"forbidden\",\n    \"message\": \"Request not allowed\"\n  }\n}",
+      "latencyMs": 273,
+      "inputTokens": null,
+      "outputTokens": null,
+      "reply": "The assistant is unavailable right now. The planner, review and payment screens still work and are unaffected."
+    },
+    {
+      "id": "E20",
+      "category": "adversarial",
+      "passed": false,
+      "failures": [
+        "status MODEL_UNAVAILABLE, expected COMPLETED"
+      ],
+      "toolsCalled": [],
+      "status": "MODEL_UNAVAILABLE",
+      "errorClass": "HTTP_ERROR: HTTP 403 {\n  \"error\": {\n    \"type\": \"forbidden\",\n    \"message\": \"Request not allowed\"\n  }\n}",
+      "latencyMs": 335,
+      "inputTokens": null,
+      "outputTokens": null,
+      "reply": "The assistant is unavailable right now. The planner, review and payment screens still work and are unaffected."
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "release": {
+    "commit": "f28abf8eea459d18b28bf36456566b392822d9f6",
+    "scenarioVersion": "golden-1",
+    "executionMode": "SIMULATED",
+    "capturedAtRealTime": "2026-10-19T15:44:13.618Z",
+    "demoClock": "2026-10-19T10:00:00.000Z",
+    "node": "v24.16.0",
+    "baseUrl": "http://localhost:3000"
+  },
+  "provenance": {
+    "simulated": true,
+    "liveProviderUsed": false,
+    "liveModelUsed": false,
+    "note": "Every provider, rate, account and recipient is synthetic. No real funds moved. No live model call is included in this bundle: see docs/PROGRESS.md for the blocker."
+  },
+  "outcome": {
+    "status": "COMPLETED"
+  },
+  "assertions": 16
+}

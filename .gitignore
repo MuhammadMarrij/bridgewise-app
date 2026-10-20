@@ -1,0 +1,23 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.codex-build/
+*.tsbuildinfo
+
+# secrets and local config
+.env
+.env.local
+.env.*.local
+
+# private administrative material - never commit
+_private/
+*.xlsx
+*.docx
+Screenshot*.png
+
+# test and evidence output
+playwright-report/
+test-results/
+evidence/live/
