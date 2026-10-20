@@ -16,8 +16,17 @@ const Body = z
       .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(4000) }).strict())
       .max(12)
       .optional(),
+    lang: z.enum(['en', 'zh']).optional(),
   })
   .strict();
+
+// Chinese words the guided planner's English intents understand. The live model needs none of this.
+const ZH_HINTS: Array<[RegExp, string]> = [
+  [/学费/, 'pay my tuition'], [/汇率|走势/, 'exchange rate'], [/兑换|换汇|换成/, 'convert'], [/汇款|寄钱|转账/, 'send'],
+  [/最便宜|比较/, 'cheapest compare providers'], [/预算/, 'budget'], [/花了|支出|开销|还能用/, 'spending'],
+  [/流水|交易记录|最近交易/, 'transactions'], [/提醒/, 'alert'], [/提现|转出/, 'withdraw'], [/状况|情况|余额/, 'overview'],
+];
+const withHints = (m: string) => { const h = ZH_HINTS.filter(([re]) => re.test(m)).map(([, w]) => w); return h.length ? `${m} (${h.join(', ')})` : m; };
 
 /**
  * One assistant turn. The live model is used when configured; otherwise the
@@ -33,7 +42,12 @@ export async function POST(req: NextRequest) {
     rateLimit(`assistant-ip:${clientKey(req)}`, 40, 60_000);
     const body = await parseBody(req, Body);
     const db = getDb();
-    const opts = { tools: BANK_TOOLS, system: BANK_SYSTEM_PROMPT, history: body.history ?? [] };
+    const zh = body.lang === 'zh';
+    const opts = {
+      tools: BANK_TOOLS,
+      system: zh ? `${BANK_SYSTEM_PROMPT}\n\nThe student is using the Chinese interface: reply in Simplified Chinese (简体中文). Keep amounts, currency codes and provider names as they are.` : BANK_SYSTEM_PROMPT,
+      history: body.history ?? [],
+    };
 
     let run = liveModelConfigured()
       ? await runAgentTurn({ db, session }, selectLiveAdapter(), body.message, opts)
@@ -41,7 +55,7 @@ export async function POST(req: NextRequest) {
     let fellBack: string | null = null;
     if (!run || run.status === 'MODEL_UNAVAILABLE' || run.status === 'TIMEOUT') {
       fellBack = run ? run.errorClass ?? run.status : null;
-      run = await runAgentTurn({ db, session }, bankGuidedAdapter(), body.message, opts);
+      run = await runAgentTurn({ db, session }, bankGuidedAdapter(), zh ? withHints(body.message) : body.message, opts);
     }
     await recordRun(db, session.id, run);
 

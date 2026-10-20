@@ -46,8 +46,12 @@ export function fail(error: unknown, correlationId = randomUUID()): NextResponse
  * still not be able to drive a payment from another site.
  */
 export function assertSameOrigin(req: NextRequest): void {
-  const allowed = (process.env.ALLOWED_ORIGINS ?? 'http://localhost:3000')
-    .split(',')
+  // On Vercel the deployment's own URLs are allowed automatically; any custom
+  // domain is added through ALLOWED_ORIGINS.
+  const vercel = [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+    .filter(Boolean)
+    .map((h) => `https://${h}`);
+  const allowed = [...(process.env.ALLOWED_ORIGINS ?? 'http://localhost:3000').split(','), ...vercel]
     .map((o) => o.trim())
     .filter(Boolean);
   const origin = req.headers.get('origin');

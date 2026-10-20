@@ -26,13 +26,18 @@
     "evidence": "node --env-file-if-exists=.env scripts/evidence.mjs",
     "package": "node scripts/package.mjs",
     "purge": "node --env-file-if-exists=.env scripts/purge.mjs",
-    "bundle": "node scripts/bundle.mjs"
+    "bundle": "node scripts/bundle.mjs",
+    "vercel-build": "node scripts/migrate.mjs && next build",
+    "alipay:key-for-env": "node scripts/alipay-key.mjs"
   },
   "dependencies": {
+    "@stripe/stripe-js": "10.1.0",
+    "alipay-sdk": "4.14.0",
     "drizzle-orm": "0.45.4",
     "next": "16.4.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "stripe": "23.0.0",
     "zod": "4.6.7"
   },
   "devDependencies": {

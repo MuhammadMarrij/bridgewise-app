@@ -8,9 +8,13 @@ import { test, expect, type Page } from '@playwright/test';
 async function open(page: Page, name = 'Wei') {
   await page.context().clearCookies();
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Open your account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your money, across borders, handled.' })).toBeVisible();
+  await page.getByLabel('Email').fill(`e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`);
+  await page.getByLabel('Password').fill('testpass123');
   await page.getByLabel('Your first name').fill(name);
-  await page.getByRole('button', { name: 'Open my account' }).click();
+  // These scenarios were written for a CNY-home, GBP-study student.
+  await page.getByRole('button', { name: 'From China, studying in the UK' }).click();
+  await page.getByRole('button', { name: 'Create my account' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(`, ${name}$`) })).toBeVisible();
 }
 
@@ -126,4 +130,13 @@ test('a budget shows spending against its limit', async ({ page }) => {
   await page.getByLabel(/Monthly limit/).fill('100');
   await page.getByRole('button', { name: 'Set budget' }).click();
   await expect(page.getByText(/0\.00 \/ 100\.00 GBP/)).toBeVisible();
+});
+
+test('the 中文 switch turns the interface Chinese and back', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: '切换到中文' }).click();
+  await expect(page.getByRole('heading', { name: /^(早上好|下午好|晚上好), Wei$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: '充值' }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Switch to English' }).click();
+  await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), Wei$/ })).toBeVisible();
 });

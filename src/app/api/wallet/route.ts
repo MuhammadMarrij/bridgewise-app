@@ -8,6 +8,7 @@ import { actionProposals, obligations, rateAlerts } from '@/lib/db/schema';
 import { formatAmount, type Currency } from '@/lib/domain/money';
 import { insightsFor } from '@/lib/services/insights';
 import { listTransactions } from '@/lib/services/money-ops';
+import { userForSession } from '@/lib/services/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,7 @@ export async function GET(req: NextRequest) {
     const now = Date.now();
     return json({
       profile: { home, study },
+      user: await userForSession(db, session.id),
       wallet,
       insights,
       transactions: await listTransactions(db, session.id, { limit: 12 }),

@@ -94,6 +94,8 @@ p { margin: 0; }
 .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .85rem; gap: .75rem; }
 .card-head h2 { font-size: 1.02rem; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.grid-2.wide-left { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.grid-2.wide-right { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .85rem; }
 .stack { display: flex; flex-direction: column; gap: .75rem; }
 .row { display: flex; align-items: center; gap: .75rem; }
@@ -255,7 +257,7 @@ caption { text-align: left; caption-side: bottom; padding-top: .6rem; font-size:
   .tabbar button { all: unset; flex: 1; text-align: center; padding: .55rem 0 .6rem; font-size: .7rem; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
   .tabbar button[aria-current="page"] { color: var(--brand); }
   .fab { bottom: 4.6rem; }
-  .grid-2, .grid-3 { grid-template-columns: minmax(0, 1fr); }
+  .grid-2, .grid-2.wide-left, .grid-2.wide-right, .grid-3 { grid-template-columns: minmax(0, 1fr); }
   .onboard { grid-template-columns: 1fr; }
   .onboard-hero { padding: 2rem 1.25rem; }
   .onboard-form { padding: 1.25rem; }
@@ -298,3 +300,8 @@ caption { text-align: left; caption-side: bottom; padding-top: .6rem; font-size:
 .source-brand { font-weight: 800; letter-spacing: .02em; }
 .source-kind { font-size: .72rem; opacity: .85; border: 1px solid rgba(255,255,255,.4); border-radius: 999px; padding: .05rem .5rem; }
 .source-num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.15rem; letter-spacing: .08em; }
+
+/* language switch */
+.lang-switch { position: fixed; top: .75rem; right: .75rem; z-index: 60; font: inherit; font-size: .8rem; font-weight: 600;
+  padding: .3rem .65rem; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.lang-switch:hover { border-color: var(--brand); }

@@ -115,6 +115,18 @@ export function bankGuidedAdapter(): ModelAdapter {
         return say(`Ready to pay ${unpaid.description} (${unpaid.amount} ${unpaid.currency}, due in ${unpaid.daysLeft} days): it costs ${p.costs}, leaving ${p.leftInPocketAfter}. Approve the card to send it.`);
       }
 
+      // "How do I build credit", "芝麻信用", "征信".
+      if (/credit score|build credit|credit history|credit report|信用|征信|芝麻|支付分|sesame/i.test(user)) {
+        if (!got.has('get_credit_plan')) return use(call('get_credit_plan'));
+        const c = got.get('get_credit_plan')!;
+        const done = (c.steps as Json[]).filter((s) => s.done).length;
+        return say(
+          `Your BridgeWise credit-readiness is ${c.readiness}/100 — ${done} of ${c.steps.length} steps done (${c.onTime} on-time payments). ` +
+            (c.next ? `Next: ${c.next.title}. ${c.next.how}` : 'Every step is done — keep paying on time.') +
+            ' This is our measure of the habits that build 征信, 芝麻信用 and 微信支付分, not your actual score.',
+        );
+      }
+
       // "Set a food budget of 200", "budget 150 for transport".
       const CATS = ['tuition', 'rent', 'food', 'transport', 'bills', 'shopping', 'family', 'other'];
       const catWord = CATS.find((c) => t.includes(c)) ?? (/grocer|eat|restaurant/.test(t) ? 'food' : /bus|train|uber|travel/.test(t) ? 'transport' : null);

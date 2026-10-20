@@ -13,6 +13,8 @@ import { Assistant, Icon, type ChatMsg, type Json } from './ui';
 import { Bills, Home, Markets, Onboarding, Wallet, api, type Ctx } from './views';
 import { Activity, AddMoney, Budget, RecordPayment, SendMoney } from './views2';
 import { Accounts } from './views3';
+import { Credit } from './views4';
+import { getLang } from './i18n';
 
 const TABS = [
   { id: 'home', label: 'Home', icon: 'home', mobile: true },
@@ -21,6 +23,7 @@ const TABS = [
   { id: 'activity', label: 'Activity', icon: 'clock', mobile: true },
   { id: 'send', label: 'Send', icon: 'send', mobile: true },
   { id: 'budget', label: 'Budget', icon: 'chart', mobile: false },
+  { id: 'credit', label: 'Credit', icon: 'shield', mobile: false },
   { id: 'bills', label: 'Bills', icon: 'bill', mobile: false },
   { id: 'markets', label: 'Markets', icon: 'up', mobile: false },
 ] as const;
@@ -31,6 +34,7 @@ const TITLES: Record<string, [string, string]> = {
   bills: ['Bills', 'Tuition and fees — read from your invoice, paid on your approval.'],
   send: ['Send money', 'To family, friends and landlords — and what the market would charge you.'],
   activity: ['Activity', 'Every movement on every pocket, with the balance after it.'],
+  credit: ['Build credit in China', '征信, 芝麻信用 and 微信支付分 — a plan, and the habits each one rewards.'],
   accounts: ['Cards & accounts', 'Bank cards, Alipay, WeChat Pay and bank accounts linked to your wallet.'],
   budget: ['Budget', 'Where your money goes, and how long it will last.'],
   markets: ['Markets', 'The exchange rates that matter to you.'],
@@ -50,7 +54,9 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      setData(await api('/api/wallet'));
+      const d = await api('/api/wallet');
+      setData(d);
+      if (d.user?.name) setName(d.user.name);
       setState('ready');
     } catch (e: any) {
       if (e.status === 401) setState('onboard');
@@ -59,6 +65,18 @@ export default function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Coming back from Alipay's cashier: ask the server, which asks Alipay. The
+  // return URL itself proves nothing.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const trade = q.get('trade');
+    if (q.get('pay') !== 'alipay' || !trade) return;
+    window.history.replaceState({}, '', '/');
+    api('/api/pay/alipay/confirm', { method: 'POST', body: JSON.stringify({ outTradeNo: trade }) })
+      .then((r) => { setToast(r.credited ? { kind: 'ok', text: `Alipay confirmed the payment. CNY pocket: ${r.balance}.` } : { kind: 'error', text: `Alipay reports ${r.status}; nothing credited.` }); refresh(); })
+      .catch((e) => setToast({ kind: 'error', text: e.message }));
+  }, [refresh]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t); }, [toast]);
   useEffect(() => { try { const n = localStorage.getItem('bw-name'); if (n) setName(n); } catch { /* private mode */ } }, []);
 
@@ -70,7 +88,7 @@ export default function App() {
     setChat((c) => [...c, { role: 'user', content: text }]);
     setThinking(true);
     try {
-      const r = await api('/api/assistant', { method: 'POST', body: JSON.stringify({ message: text, history }) });
+      const r = await api('/api/assistant', { method: 'POST', body: JSON.stringify({ message: text, history, lang: getLang() }) });
       setChat((c) => [...c, { role: 'assistant', content: r.reply || '…', steps: r.steps, proposals: r.proposals, mode: r.mode }]);
       await refresh();
     } catch (e: any) {
@@ -119,6 +137,9 @@ export default function App() {
             </button>
           ))}
         </div>
+        <button className="btn secondary small" style={{ margin: '0 .5rem' }} onClick={async () => { await api('/api/auth/signout', { method: 'POST', body: '{}' }).catch(() => {}); setChat([]); setData(null); setState('onboard'); }}>
+          Sign out{data?.user?.email ? ` · ${data.user.email}` : ''}
+        </button>
         <div className="side-foot">
           <Icon name="shield" size={13} /> Every action is approved by you. Rates: ECB and live provider quotes. Balances held in BridgeWise&rsquo;s own ledger.
         </div>
@@ -132,7 +153,7 @@ export default function App() {
         <div className="main-inner">
           <div className="page-head">
             <div>
-              <h1>{tab === 'home' ? `${greeting}, ${name}` : title}</h1>
+              <h1>{tab === 'home' ? <>{greeting}, {name}</> : title}</h1>
               <p className="muted">{sub}</p>
             </div>
             <button className="btn secondary small" onClick={() => setPanel(true)}><Icon name="spark" size={14} /> Ask BridgeWise</button>
@@ -144,6 +165,7 @@ export default function App() {
           {tab === 'send' && <SendMoney {...ctx} />}
           {tab === 'activity' && <Activity {...ctx} />}
           {tab === 'accounts' && <Accounts {...ctx} />}
+          {tab === 'credit' && <Credit {...ctx} />}
           {tab === 'budget' && <Budget {...ctx} />}
           {tab === 'markets' && <Markets {...ctx} />}
         </div>

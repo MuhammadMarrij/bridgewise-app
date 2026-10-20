@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import './globals.css';
+import { LangSwitch } from './i18n';
 
 export const metadata = {
   title: 'BridgeWise — your money across borders',
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <a className="skip" href="#main">Skip to content</a>
         {children}
+        <LangSwitch />
       </body>
     </html>
   );

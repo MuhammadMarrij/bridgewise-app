@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApprovalCard, CATEGORY_ICON, CcyBadge, Donut, Icon, Sheet, money, type Json } from './ui';
 import { CURRENCIES, Send as CompareProviders, api, type Ctx } from './views';
+import { AlipayCheckout, StripeCheckout, useProviders } from './pay';
 
 const CATS = ['food', 'rent', 'transport', 'bills', 'shopping', 'tuition', 'family', 'other'];
 const key = () => `ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -35,6 +36,8 @@ export function AddMoney({ ctx, onClose, currency }: { ctx: Ctx; onClose: () => 
   const [via, setVia] = useState('');
   useEffect(() => { api('/api/linked').then((r) => { setSources(r.sources); if (r.sources[0]) setVia(r.sources[0].id); }).catch(() => {}); }, []);
   const viaSrc = sources.find((s) => s.id === via);
+  const providers = useProviders();
+  const [how, setHow] = useState<'linked' | 'alipay' | 'stripe'>('linked');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [k] = useState(key);
@@ -49,7 +52,20 @@ export function AddMoney({ ctx, onClose, currency }: { ctx: Ctx; onClose: () => 
   }
   return (
     <Sheet title="Add money" onClose={onClose}>
-      <form className="stack" onSubmit={go}>
+      {(providers?.alipay || providers?.stripe) && (
+        <div className="seg" role="group" aria-label="How" style={{ marginBottom: '1rem' }}>
+          <button aria-pressed={how === 'linked'} onClick={() => setHow('linked')}>Linked account</button>
+          {providers?.alipay && <button aria-pressed={how === 'alipay'} onClick={() => setHow('alipay')}>Alipay{providers.alipaySandbox ? ' (sandbox)' : ''}</button>}
+          {providers?.stripe && <button aria-pressed={how === 'stripe'} onClick={() => setHow('stripe')}>Card · Stripe{providers.stripeTestMode ? ' (test)' : ''}</button>}
+        </div>
+      )}
+      {how === 'alipay' && <AlipayCheckout onError={setErr} />}
+      {how === 'stripe' && providers?.stripePublishableKey && (
+        <StripeCheckout publishableKey={providers.stripePublishableKey} currency={ctx.data.profile.study}
+          onDone={async () => { await ctx.refresh(); onClose(); }} onError={setErr} />
+      )}
+      {how !== 'linked' && err && <div className="notice error" role="alert" style={{ marginTop: '.75rem' }}>{err}</div>}
+      {how === 'linked' && <form className="stack" onSubmit={go}>
         <div><label htmlFor="am-v">From</label>
           <select id="am-v" value={via} onChange={(e) => setVia(e.target.value)}>
             {sources.map((s) => <option key={s.id} value={s.id}>{s.label} ({s.currency})</option>)}
@@ -62,7 +78,7 @@ export function AddMoney({ ctx, onClose, currency }: { ctx: Ctx; onClose: () => 
               : <select aria-label="Currency" value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value })}>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}</select>}</div></div>
         {err && <div className="notice error" role="alert">{err}</div>}
         <button className="btn" disabled={busy} style={{ justifyContent: 'center' }}>{busy ? 'Adding…' : 'Add money'}</button>
-      </form>
+      </form>}
     </Sheet>
   );
 }

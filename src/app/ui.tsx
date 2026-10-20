@@ -206,6 +206,7 @@ const STEP_LABEL: Record<string, string> = {
   set_budget: 'set a budget',
   list_linked_accounts: 'checked linked accounts',
   propose_withdrawal: 'prepared withdrawal',
+  get_credit_plan: 'checked your credit plan',
 };
 
 export function Assistant({

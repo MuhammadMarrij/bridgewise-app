@@ -22,6 +22,7 @@ import { addBill, extractInvoice, proposeBillPayment } from '../services/bills';
 import { listBudgets, listRecipients, listTransactions, proposeSend, setBudget, spendingSummary } from '../services/money-ops';
 import { CATEGORIES, type Category } from '../services/statement';
 import { listSources, proposeWithdrawal } from '../services/linked';
+import { creditPlan } from '../services/credit';
 import type { ToolDefinition, ToolContext } from './tools';
 import { TOOLS } from './tools';
 
@@ -320,11 +321,30 @@ const withdrawTool: ToolDefinition = {
   },
 };
 
+
+const creditTool: ToolDefinition = {
+  name: 'get_credit_plan',
+  description:
+    "The student's plan for building credit in China: the PBOC credit report (征信), Sesame Credit (芝麻信用) and " +
+    'WeChat Pay Score (微信支付分). Returns each step, which are done (detected from their account or marked by them), ' +
+    "BridgeWise's own readiness measure and the next step. You cannot see any real score; never claim to.",
+  schema: z.object({}).strict(),
+  handler: async (ctx) => {
+    const session = requireSession(ctx);
+    const plan = await creditPlan(ctx.db, session, profileOf(ctx).study);
+    return bound({
+      readiness: plan.readiness, note: plan.readinessNote, onTime: plan.onTimePayments, late: plan.latePayments,
+      next: plan.next && { title: plan.next.title, how: plan.next.how, system: plan.next.system },
+      steps: plan.steps.map((s) => ({ id: s.id, system: s.system, title: s.title, done: s.done })),
+    });
+  },
+};
+
 const compare = TOOLS.find((t) => t.name === 'compare_live_providers')!;
 
 export const BANK_TOOLS: readonly ToolDefinition[] = [
   overview, transactionsTool, spendingTool, fx, compare, recipientsTool,
-  readInvoice, addBillTool, payBillTool, convert, sendTool, alert, budgetTool, linkedTool, withdrawTool,
+  readInvoice, addBillTool, payBillTool, convert, sendTool, alert, budgetTool, linkedTool, withdrawTool, creditTool,
 ];
 
 export const BANK_SYSTEM_PROMPT = `You are BridgeWise, the AI money assistant inside a cross-border banking app for international students. Students hold money in several currencies, receive money from family abroad, and pay tuition and rent in the country where they study.
@@ -335,6 +355,7 @@ How you work:
 - When the student pastes an invoice, call read_invoice, confirm the figures with them, then add_bill and propose_bill_payment.
 - For questions about spending, budgets or how long their money will last, call get_spending; for 'what did I pay' call get_transactions.
 - To move money to the student's own Alipay, WeChat Pay or bank, call list_linked_accounts and propose_withdrawal.
+- For credit-building questions call get_credit_plan. You cannot see any real 征信, Sesame or WeChat Pay score; explain the plan and the next step.
 - To send money, call list_recipients and propose_transfer. You cannot add recipients: if the person is missing, ask the student to add them in Send.
 - You can PREPARE actions (propose_conversion, propose_bill_payment, propose_transfer, set_rate_alert, set_budget) but you cannot execute anything. A proposal appears as a card the student approves. Say so plainly: "I've prepared it — review and approve the card."
 - Be proactive and specific. If a bill is due soon, a pocket cannot cover it, or the rate has moved, say so and offer the next step.

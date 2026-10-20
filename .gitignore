@@ -21,3 +21,8 @@ Screenshot*.png
 playwright-report/
 test-results/
 evidence/live/
+
+# Provider keys and connection strings: never committed
+secrets/
+.env.*
+!.env.example

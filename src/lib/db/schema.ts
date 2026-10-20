@@ -459,3 +459,33 @@ export const linkedSources = pgTable('linked_sources', {
   status: text('status').notNull().default('ACTIVE'),
   createdAt: instant('created_at').notNull().defaultNow(),
 });
+
+/** A student's login. Owns exactly one wallet workspace (session_id). */
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  name: text('name').notNull(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  createdAt: instant('created_at').notNull().defaultNow(),
+  lastLoginAt: instant('last_login_at'),
+});
+
+export const creditProgress = pgTable('credit_progress', {
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  stepId: text('step_id').notNull(),
+  doneAt: instant('done_at').notNull().defaultNow(),
+});
+
+export const externalPayments = pgTable('external_payments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull(),
+  outTradeNo: text('out_trade_no').notNull(),
+  currency: text('currency').notNull(),
+  amountMinor: minor('amount_minor').notNull(),
+  status: text('status').notNull().default('PENDING'),
+  providerRef: text('provider_ref'),
+  createdAt: instant('created_at').notNull().defaultNow(),
+  settledAt: instant('settled_at'),
+});

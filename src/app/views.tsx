@@ -29,14 +29,16 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { d
 /* ------------------------------------------------------------- onboarding */
 
 const PERSONAS = [
+  { id: 'pk-cn', label: 'From Pakistan, studying in China', home: 'PKR', study: 'CNY', homeBalance: '900000', studyBalance: '3200.00' },
+  { id: 'in-cn', label: 'From India, studying in China', home: 'INR', study: 'CNY', homeBalance: '450000.00', studyBalance: '2500.00' },
   { id: 'cn-uk', label: 'From China, studying in the UK', home: 'CNY', study: 'GBP', homeBalance: '120000.00', studyBalance: '900.00' },
   { id: 'pk-us', label: 'From Pakistan, studying in the US', home: 'PKR', study: 'USD', homeBalance: '2500000', studyBalance: '450.00' },
-  { id: 'in-uk', label: 'From India, studying in the UK', home: 'INR', study: 'GBP', homeBalance: '950000.00', studyBalance: '600.00' },
 ];
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
-  const [form, setForm] = useState({ name: '', homeCurrency: 'CNY', studyCurrency: 'GBP', homeBalance: '120000.00', studyBalance: '900.00' });
-  const [persona, setPersona] = useState('cn-uk');
+  const [mode, setMode] = useState<'signup' | 'signin'>('signup');
+  const [form, setForm] = useState({ name: '', email: '', password: '', homeCurrency: 'PKR', studyCurrency: 'CNY', homeBalance: '900000', studyBalance: '3200.00' });
+  const [persona, setPersona] = useState('pk-cn');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -45,8 +47,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      await api('/api/onboard', { method: 'POST', body: JSON.stringify({ ...form, name: form.name.trim() || 'there' }) });
-      try { localStorage.setItem('bw-name', form.name.trim() || 'there'); } catch { /* private mode */ }
+      const r = mode === 'signup'
+        ? await api('/api/auth/signup', { method: 'POST', body: JSON.stringify({ ...form, name: form.name.trim() || 'Student' }) })
+        : await api('/api/auth/signin', { method: 'POST', body: JSON.stringify({ email: form.email, password: form.password }) });
+      try { localStorage.setItem('bw-name', r.name ?? form.name); } catch { /* private mode */ }
       onDone();
     } catch (err: any) { setError(err.message); } finally { setBusy(false); }
   }
@@ -56,12 +60,12 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       <section className="onboard-hero">
         <div className="logo" style={{ padding: 0 }}><span className="logo-mark">BW</span> BridgeWise</div>
         <h1>Your money, across borders, handled.</h1>
-        <p>One account for every currency you live in. An AI assistant that reads your tuition invoices, watches exchange rates and prepares payments — and never moves a penny without your approval.</p>
+        <p>One account for every currency you live in — linked to Alipay, WeChat Pay, your bank cards and your bank back home. An AI assistant that reads your tuition invoices, watches exchange rates, builds your credit in China and prepares every payment — and never moves money without your approval.</p>
         <div className="features">
           {[
-            ['wallet', 'Hold GBP, USD, CNY, PKR, INR and more — valued at live ECB rates'],
+            ['wallet', 'CNY, PKR, INR, GBP, USD and more — valued at live ECB rates'],
+            ['card', 'Link Alipay 支付宝, WeChat Pay 微信支付, UnionPay and Visa cards, CCB, ICBC and BOC'],
             ['bill', 'Paste a tuition invoice; the assistant sets up the payment and protects your living money'],
-            ['send', 'Compare what 17 real banks and providers charge — including the margin hidden in the rate'],
             ['shield', 'Every action is a card you approve. The assistant cannot execute anything.'],
           ].map(([i, t]) => (
             <div className="feature" key={t}><span><Icon name={i!} size={15} /></span><span>{t}</span></div>
@@ -70,42 +74,51 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       </section>
       <section className="onboard-form">
         <form className="card stack" onSubmit={submit}>
-          <h2 style={{ fontSize: '1.25rem' }}>Open your account</h2>
-          <p className="muted small">Takes 20 seconds. Test funds in BridgeWise&rsquo;s own ledger; rates and provider quotes are live.</p>
-          <div className="stack" style={{ gap: '.45rem' }}>
-            {PERSONAS.map((p) => (
-              <button type="button" key={p.id} className="persona" aria-pressed={persona === p.id}
-                onClick={() => { setPersona(p.id); setForm((f) => ({ ...f, homeCurrency: p.home, studyCurrency: p.study, homeBalance: p.homeBalance, studyBalance: p.studyBalance })); }}>
-                <span className="row" style={{ gap: '.5rem' }}><CcyBadge ccy={p.home} /> → <CcyBadge ccy={p.study} /> <span>{p.label}</span></span>
-              </button>
-            ))}
+          <div className="seg" role="group" aria-label="Account">
+            <button type="button" aria-pressed={mode === 'signup'} onClick={() => setMode('signup')}>Create account</button>
+            <button type="button" aria-pressed={mode === 'signin'} onClick={() => setMode('signin')}>Sign in</button>
           </div>
-          <div>
-            <label htmlFor="nm">Your first name</label>
-            <input id="nm" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Wei" autoComplete="given-name" />
-          </div>
-          <div className="field-row">
-            <div>
-              <label htmlFor="hc">Money from home</label>
-              <div className="pair">
-                <input id="hc" inputMode="decimal" value={form.homeBalance} onChange={(e) => set('homeBalance', e.target.value)} />
-                <select aria-label="Home currency" value={form.homeCurrency} onChange={(e) => set('homeCurrency', e.target.value)}>
-                  {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-                </select>
+          <div><label htmlFor="em">Email</label><input id="em" type="email" autoComplete="email" value={form.email} onChange={(e) => set('email', e.target.value)} required /></div>
+          <div><label htmlFor="pw">Password</label><input id="pw" type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={form.password} onChange={(e) => set('password', e.target.value)} required />
+            {mode === 'signup' && <p className="hint">At least 8 characters, with letters and a number.</p>}</div>
+          {mode === 'signup' && (
+            <>
+              <div><label htmlFor="nm">Your first name</label><input id="nm" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Ali" autoComplete="given-name" /></div>
+              <div className="stack" style={{ gap: '.45rem' }}>
+                {PERSONAS.map((p) => (
+                  <button type="button" key={p.id} className="persona" aria-pressed={persona === p.id}
+                    onClick={() => { setPersona(p.id); setForm((f) => ({ ...f, homeCurrency: p.home, studyCurrency: p.study, homeBalance: p.homeBalance, studyBalance: p.studyBalance })); }}>
+                    <span className="row" style={{ gap: '.5rem' }}><CcyBadge ccy={p.home} /> → <CcyBadge ccy={p.study} /> <span>{p.label}</span></span>
+                  </button>
+                ))}
               </div>
-            </div>
-            <div>
-              <label htmlFor="sc">Money where you study</label>
-              <div className="pair">
-                <input id="sc" inputMode="decimal" value={form.studyBalance} onChange={(e) => set('studyBalance', e.target.value)} />
-                <select aria-label="Study currency" value={form.studyCurrency} onChange={(e) => set('studyCurrency', e.target.value)}>
-                  {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-                </select>
+              <div className="field-row">
+                <div>
+                  <label htmlFor="hc">Money from home</label>
+                  <div className="pair">
+                    <input id="hc" inputMode="decimal" value={form.homeBalance} onChange={(e) => set('homeBalance', e.target.value)} />
+                    <select aria-label="Home currency" value={form.homeCurrency} onChange={(e) => set('homeCurrency', e.target.value)}>
+                      {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="sc">Money where you study</label>
+                  <div className="pair">
+                    <input id="sc" inputMode="decimal" value={form.studyBalance} onChange={(e) => set('studyBalance', e.target.value)} />
+                    <select aria-label="Study currency" value={form.studyCurrency} onChange={(e) => set('studyCurrency', e.target.value)}>
+                      {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
           {error && <div className="notice error" role="alert">{error}</div>}
-          <button className="btn" disabled={busy} style={{ justifyContent: 'center' }}>{busy ? 'Opening…' : 'Open my account'}</button>
+          <button className="btn" disabled={busy} style={{ justifyContent: 'center' }}>
+            {busy ? 'Please wait…' : mode === 'signup' ? 'Create my account' : 'Sign in'}
+          </button>
+          <p className="faint small">Starting balances are test funds in BridgeWise&rsquo;s ledger. Rates and provider quotes are live.</p>
         </form>
       </section>
     </div>
@@ -122,7 +135,7 @@ export function Home({ data, ask, approve, decline, approving, go, sheet }: Ctx)
 
   return (
     <>
-      <div className="grid-2" style={{ gridTemplateColumns: '1.25fr 1fr' }}>
+      <div className="grid-2 wide-left">
         <section className="card balance-hero">
           <div className="label">Total across your pockets</div>
           <div className="big num">{money(w.totalInDisplay, w.displayCurrency)}</div>
